@@ -1,0 +1,38 @@
+UniverSeg Baseline Results - Heart (MRI)
+=============================================
+Support Slice Indices: [np.int64(478), np.int64(722)]
+Test Slice Indices (30): [np.int64(924), np.int64(196), np.int64(239), np.int64(234), np.int64(1022), np.int64(768), np.int64(786), np.int64(487), np.int64(792), np.int64(1142), np.int64(848), np.int64(40), np.int64(170), np.int64(44), np.int64(56), np.int64(175), np.int64(598), np.int64(5), np.int64(561), np.int64(1136), np.int64(202), np.int64(410), np.int64(1147), np.int64(139), np.int64(1170), np.int64(529), np.int64(1174), np.int64(1180), np.int64(1021), np.int64(1119)]
+
+Test Slice 01 (Index   924): Dice = 0.3932
+Test Slice 02 (Index   196): Dice = 0.0390
+Test Slice 03 (Index   239): Dice = 0.2976
+Test Slice 04 (Index   234): Dice = 0.2032
+Test Slice 05 (Index  1022): Dice = 0.4326
+Test Slice 06 (Index   768): Dice = 0.1364
+Test Slice 07 (Index   786): Dice = 0.3113
+Test Slice 08 (Index   487): Dice = 0.7034
+Test Slice 09 (Index   792): Dice = 0.0101
+Test Slice 10 (Index  1142): Dice = 0.4077
+Test Slice 11 (Index   848): Dice = 0.3824
+Test Slice 12 (Index    40): Dice = 0.3361
+Test Slice 13 (Index   170): Dice = 0.4080
+Test Slice 14 (Index    44): Dice = 0.0511
+Test Slice 15 (Index    56): Dice = 0.2628
+Test Slice 16 (Index   175): Dice = 0.6001
+Test Slice 17 (Index   598): Dice = 0.2127
+Test Slice 18 (Index     5): Dice = 0.3389
+Test Slice 19 (Index   561): Dice = 0.1951
+Test Slice 20 (Index  1136): Dice = 0.3705
+Test Slice 21 (Index   202): Dice = 0.0597
+Test Slice 22 (Index   410): Dice = 0.0232
+Test Slice 23 (Index  1147): Dice = 0.5986
+Test Slice 24 (Index   139): Dice = 0.4342
+Test Slice 25 (Index  1170): Dice = 0.4888
+Test Slice 26 (Index   529): Dice = 0.3226
+Test Slice 27 (Index  1174): Dice = 0.3019
+Test Slice 28 (Index  1180): Dice = 0.0835
+Test Slice 29 (Index  1021): Dice = 0.3761
+Test Slice 30 (Index  1119): Dice = 0.5635
+
+Mean Dice Score: 0.3115
+Std Dice Score:  0.1810

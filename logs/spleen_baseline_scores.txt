@@ -1,0 +1,38 @@
+UniverSeg Baseline Results - Spleen (CT)
+=============================================
+Support Slice Indices: [np.int64(180), np.int64(154)]
+Test Slice Indices (30): [np.int64(233), np.int64(303), np.int64(104), np.int64(294), np.int64(160), np.int64(109), np.int64(210), np.int64(250), np.int64(37), np.int64(261), np.int64(246), np.int64(2), np.int64(78), np.int64(41), np.int64(44), np.int64(190), np.int64(263), np.int64(266), np.int64(55), np.int64(199), np.int64(184), np.int64(112), np.int64(249), np.int64(204), np.int64(232), np.int64(70), np.int64(299), np.int64(148), np.int64(90), np.int64(302)]
+
+Test Slice 01 (Index   233): Dice = 0.7834
+Test Slice 02 (Index   303): Dice = 0.6712
+Test Slice 03 (Index   104): Dice = 0.1802
+Test Slice 04 (Index   294): Dice = 0.5319
+Test Slice 05 (Index   160): Dice = 0.6560
+Test Slice 06 (Index   109): Dice = 0.1277
+Test Slice 07 (Index   210): Dice = 0.0854
+Test Slice 08 (Index   250): Dice = 0.6274
+Test Slice 09 (Index    37): Dice = 0.6952
+Test Slice 10 (Index   261): Dice = 0.0946
+Test Slice 11 (Index   246): Dice = 0.6720
+Test Slice 12 (Index     2): Dice = 0.2868
+Test Slice 13 (Index    78): Dice = 0.9151
+Test Slice 14 (Index    41): Dice = 0.8688
+Test Slice 15 (Index    44): Dice = 0.8614
+Test Slice 16 (Index   190): Dice = 0.0708
+Test Slice 17 (Index   263): Dice = 0.1330
+Test Slice 18 (Index   266): Dice = 0.3035
+Test Slice 19 (Index    55): Dice = 0.8948
+Test Slice 20 (Index   199): Dice = 0.9149
+Test Slice 21 (Index   184): Dice = 0.8662
+Test Slice 22 (Index   112): Dice = 0.2118
+Test Slice 23 (Index   249): Dice = 0.6770
+Test Slice 24 (Index   204): Dice = 0.0000
+Test Slice 25 (Index   232): Dice = 0.7785
+Test Slice 26 (Index    70): Dice = 0.9155
+Test Slice 27 (Index   299): Dice = 0.6208
+Test Slice 28 (Index   148): Dice = 0.8792
+Test Slice 29 (Index    90): Dice = 0.6698
+Test Slice 30 (Index   302): Dice = 0.7496
+
+Mean Dice Score: 0.5581
+Std Dice Score:  0.3089

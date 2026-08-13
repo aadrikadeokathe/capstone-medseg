@@ -1,6 +1,6 @@
 # preprocessing.py
 """
-Preprocessing utilities for 3D CT spleen and 4D MRI brain tumour volumes.
+Preprocessing utilities for 3D CT (Spleen, Liver) and 3D/4D MRI (Brain Tumour, Heart) volumes.
 """
 
 import os
@@ -10,7 +10,11 @@ import nibabel as nib
 from src.data_loading import (
     list_spleen_files,
     list_braintumour_files,
+    list_liver_files,
+    list_heart_files,
     download_braintumour_dataset,
+    download_liver_dataset,
+    download_heart_dataset,
 )
 
 # Resolve project root from this file's location
@@ -19,13 +23,13 @@ PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 
 
 # ==========================================
-# Spleen Preprocessing
+# Single-Channel Slices Extraction (CT / Single-Channel MRI)
 # ==========================================
 
 def extract_slices(scan_path, mask_path, min_mask_pixels=50):
     """
-    Load a 3D CT scan and its mask, and return 2D slices that contain
-    enough foreground (spleen) pixels.
+    Load a 3D scan and its mask, and return 2D slices that contain
+    enough foreground pixels. Reused across Spleen (CT), Liver (CT), and Heart (MRI).
     """
     scan_vol = nib.load(scan_path).get_fdata()   # (H, W, D)
     mask_vol = nib.load(mask_path).get_fdata()    # (H, W, D)
@@ -47,16 +51,21 @@ def extract_slices(scan_path, mask_path, min_mask_pixels=50):
         else:
             img_2d = np.zeros_like(img_2d)
 
-        mask_2d = mask_2d.astype(np.uint8)
+        # Binarize mask (convert any non-zero organ/lesion label to binary 1)
+        mask_2d = (mask_2d > 0).astype(np.uint8)
 
         slices.append((img_2d, mask_2d))
 
     return slices
 
 
+# ==========================================
+# Task09 Spleen Preprocessing
+# ==========================================
+
 def build_spleen_dataset(output_dir=None):
     """
-    Process all training scan/label pairs and save as two numpy arrays:
+    Process all training scan/label pairs for Spleen and save:
       - spleen_images.npy  (N, H, W) float32
       - spleen_masks.npy   (N, H, W) uint8
     """
@@ -84,7 +93,7 @@ def build_spleen_dataset(output_dir=None):
     np.save(img_path, images)
     np.save(msk_path, masks)
 
-    print(f"\n[INFO] Saved {images.shape[0]} slices")
+    print(f"\n[INFO] Saved {images.shape[0]} Spleen slices")
     print(f"  Images: {img_path}  shape={images.shape}  dtype={images.dtype}")
     print(f"  Masks:  {msk_path}  shape={masks.shape}  dtype={masks.dtype}")
 
@@ -92,7 +101,98 @@ def build_spleen_dataset(output_dir=None):
 
 
 # ==========================================
-# Brain Tumour Preprocessing
+# Task03 Liver Preprocessing
+# ==========================================
+
+def build_liver_dataset(output_dir=None):
+    """
+    Process all scan/label pairs for Liver and save:
+      - liver_images.npy  (N, H, W) float32
+      - liver_masks.npy   (N, H, W) uint8
+
+    SIMPLIFICATION NOTE:
+    Liver masks in MSD Task03 contain multi-label annotations (1 = liver organ, 2 = liver tumor).
+    For this first pass, we binarize the mask to "liver present or not" (merge all non-zero labels into 1),
+    following the exact same binary simplification approach used for brain tumour.
+    """
+    if output_dir is None:
+        output_dir = PROCESSED_DIR
+    os.makedirs(output_dir, exist_ok=True)
+
+    pairs = list_liver_files()
+    all_images = []
+    all_masks = []
+
+    for idx, (scan_path, mask_path) in enumerate(pairs):
+        basename = os.path.basename(scan_path)
+        slices = extract_slices(scan_path, mask_path)
+        print(f"  [{idx+1:02d}/{len(pairs)}] {basename}: {len(slices)} slices extracted")
+        for img, msk in slices:
+            all_images.append(img)
+            all_masks.append(msk)
+
+    images = np.stack(all_images, axis=0)  # (N, H, W)
+    masks = np.stack(all_masks, axis=0)    # (N, H, W)
+
+    img_path = os.path.join(output_dir, "liver_images.npy")
+    msk_path = os.path.join(output_dir, "liver_masks.npy")
+    np.save(img_path, images)
+    np.save(msk_path, masks)
+
+    print(f"\n[INFO] Saved {images.shape[0]} Liver slices")
+    print(f"  Images: {img_path}  shape={images.shape}  dtype={images.dtype}")
+    print(f"  Masks:  {msk_path}  shape={masks.shape}  dtype={masks.dtype}")
+
+    return images, masks
+
+
+# ==========================================
+# Task02 Heart Preprocessing
+# ==========================================
+
+def build_heart_dataset(output_dir=None):
+    """
+    Process all scan/label pairs for Heart and save:
+      - heart_images.npy  (N, H, W) float32
+      - heart_masks.npy   (N, H, W) uint8
+
+    NOTE:
+    Heart in MSD Task02 is a single-channel 3D MRI dataset (left atrium), so it reuses
+    the single-channel 2D slice extraction pipeline, unlike Brain Tumour's 4-channel MRI handling.
+    """
+    if output_dir is None:
+        output_dir = PROCESSED_DIR
+    os.makedirs(output_dir, exist_ok=True)
+
+    pairs = list_heart_files()
+    all_images = []
+    all_masks = []
+
+    for idx, (scan_path, mask_path) in enumerate(pairs):
+        basename = os.path.basename(scan_path)
+        slices = extract_slices(scan_path, mask_path)
+        print(f"  [{idx+1:02d}/{len(pairs)}] {basename}: {len(slices)} slices extracted")
+        for img, msk in slices:
+            all_images.append(img)
+            all_masks.append(msk)
+
+    images = np.stack(all_images, axis=0)  # (N, H, W)
+    masks = np.stack(all_masks, axis=0)    # (N, H, W)
+
+    img_path = os.path.join(output_dir, "heart_images.npy")
+    msk_path = os.path.join(output_dir, "heart_masks.npy")
+    np.save(img_path, images)
+    np.save(msk_path, masks)
+
+    print(f"\n[INFO] Saved {images.shape[0]} Heart slices")
+    print(f"  Images: {img_path}  shape={images.shape}  dtype={images.dtype}")
+    print(f"  Masks:  {msk_path}  shape={masks.shape}  dtype={masks.dtype}")
+
+    return images, masks
+
+
+# ==========================================
+# Task01 Brain Tumour Preprocessing
 # ==========================================
 
 def extract_slices_braintumour(scan_path: str, mask_path: str, min_mask_pixels: int = 50):
@@ -101,9 +201,6 @@ def extract_slices_braintumour(scan_path: str, mask_path: str, min_mask_pixels: 
     Filters slices with > min_mask_pixels nonzero pixels across ANY tumor class (1, 2, 3).
     Normalizes each of the 4 channels independently to [0, 1] range per slice.
     Converts multi-class mask into a binary 'tumor present or not' mask (merge classes 1,2,3 into 1).
-    
-    Returns:
-        List of (image_slice [shape H, W, 4], binary_mask_slice [shape H, W]) tuples.
     """
     scan_nii = nib.load(scan_path)
     mask_nii = nib.load(mask_path)
@@ -142,9 +239,7 @@ def extract_slices_braintumour(scan_path: str, mask_path: str, min_mask_pixels: 
 def build_braintumour_dataset(data_dir: str = "data", output_dir: str = "data/processed", min_mask_pixels: int = 50):
     """
     Loops through all scan/label pairs, extracts slices, and saves them as
-    data/processed/braintumour_images.npy and data/processed/braintumour_masks.npy
-    using memory-mapped arrays to prevent RAM overflow.
-    Prints final shapes and total slice count.
+    data/processed/braintumour_images.npy and data/processed/braintumour_masks.npy.
     """
     pairs = list_braintumour_files(data_dir=data_dir)
     
@@ -210,3 +305,5 @@ def build_braintumour_dataset(data_dir: str = "data", output_dir: str = "data/pr
 
 if __name__ == "__main__":
     build_spleen_dataset()
+    build_liver_dataset()
+    build_heart_dataset()

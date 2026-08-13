@@ -1,0 +1,14 @@
+UniverSeg Brain Tumour Baseline Results
+=======================================
+Dataset Shape (4D Images): (31527, 240, 240, 4)
+Dataset Shape (3D Masks):  (31527, 240, 240)
+Support Slice Indices: [np.int32(27030), np.int32(14401)]
+Test Slice Indices:    [np.int32(31152), np.int32(28718), np.int32(5500), np.int32(25571), np.int32(9134)]
+
+Test Slice 1 (Index 31152): Dice = 0.3052
+Test Slice 2 (Index 28718): Dice = 0.2646
+Test Slice 3 (Index 5500): Dice = 0.0036
+Test Slice 4 (Index 25571): Dice = 0.0000
+Test Slice 5 (Index 9134): Dice = 0.0144
+
+Average Dice Score: 0.1176

@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.data_split import get_spleen_splits, get_braintumour_splits
+from src.data_split import get_spleen_splits, get_braintumour_splits, get_heart_splits
 from src.models.in_context_model import InContextSegmentationModel
 
 
@@ -119,7 +119,7 @@ def evaluate(model, dataloader, criterion, device, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Train In-Context Fusion Model for Medical Segmentation")
-    parser.add_argument("--dataset", type=str, choices=["spleen", "braintumour"], default="spleen")
+    parser.add_argument("--dataset", type=str, choices=["spleen", "braintumour", "heart"], default="spleen")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
@@ -150,6 +150,12 @@ def main():
             target_size=(args.target_size, args.target_size)
         )
         in_channels = 1
+    elif args.dataset == "heart":
+        train_ds, val_ds, test_ds, split_sizes = get_heart_splits(
+            num_support=args.num_support,
+            target_size=(args.target_size, args.target_size)
+        )
+        in_channels = 1
     else:
         train_ds, val_ds, test_ds, split_sizes = get_braintumour_splits(
             num_support=args.num_support,
@@ -165,7 +171,7 @@ def main():
     # Instantiate model
     model = InContextSegmentationModel(
         in_channels=in_channels,
-        feature_channels=[32, 64, 128],
+        feature_channels=[64, 64, 64],
         num_heads=4,
         dropout=0.1
     ).to(device)
@@ -223,19 +229,30 @@ def main():
     print(f"   Test Dice: {test_dice:.4f}")
     print("==================================================")
 
-    # Save log file
+    # Save log files
     log_file_path = f"logs/fusion_training_{args.dataset}.txt"
+    trained_scores_path = f"logs/{args.dataset}_trained_scores.txt"
+    
+    log_content = (
+        f"In-Context Fusion Model Training Log - {args.dataset.upper()}\n"
+        "==================================================\n"
+        f"Epochs: {args.epochs}, Batch Size: {args.batch_size}, LR: {args.lr}\n"
+        f"Best Val Dice: {best_val_dice:.4f}\n"
+        f"Test Loss:     {test_loss:.4f}\n"
+        f"Test Dice:     {test_dice:.4f}\n\n"
+        "Epoch,TrainLoss,TrainDice,ValLoss,ValDice\n"
+    )
+    for ep in range(len(history["train_loss"])):
+        log_content += (
+            f"{ep+1},{history['train_loss'][ep]:.4f},{history['train_dice'][ep]:.4f},"
+            f"{history['val_loss'][ep]:.4f},{history['val_dice'][ep]:.4f}\n"
+        )
+
     with open(log_file_path, "w") as f:
-        f.write(f"In-Context Fusion Model Training Log - {args.dataset.upper()}\n")
-        f.write("==================================================\n")
-        f.write(f"Epochs: {args.epochs}, Batch Size: {args.batch_size}, LR: {args.lr}\n")
-        f.write(f"Best Val Dice: {best_val_dice:.4f}\n")
-        f.write(f"Test Loss:     {test_loss:.4f}\n")
-        f.write(f"Test Dice:     {test_dice:.4f}\n\n")
-        f.write("Epoch,TrainLoss,TrainDice,ValLoss,ValDice\n")
-        for ep in range(len(history["train_loss"])):
-            f.write(f"{ep+1},{history['train_loss'][ep]:.4f},{history['train_dice'][ep]:.4f},"
-                    f"{history['val_loss'][ep]:.4f},{history['val_dice'][ep]:.4f}\n")
+        f.write(log_content)
+
+    with open(trained_scores_path, "w") as f:
+        f.write(log_content)
 
     # Plot curves
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -260,7 +277,7 @@ def main():
     curve_plot_path = f"logs/fusion_training_curves_{args.dataset}.png"
     plt.savefig(curve_plot_path, dpi=150)
     plt.close()
-    print(f"Saved training log to {log_file_path}")
+    print(f"Saved training log to {log_file_path} and {trained_scores_path}")
     print(f"Saved curves plot to {curve_plot_path}")
 
 

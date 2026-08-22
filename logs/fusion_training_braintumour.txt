@@ -1,0 +1,10 @@
+In-Context Fusion Model Training Log - BRAINTUMOUR
+==================================================
+Epochs: 2, Batch Size: 8, LR: 0.001
+Best Val Dice: 0.2878
+Test Loss:     0.8164
+Test Dice:     0.1977
+
+Epoch,TrainLoss,TrainDice,ValLoss,ValDice
+1,0.8061,0.1098,0.8129,0.0785
+2,0.7734,0.2176,0.8027,0.2878

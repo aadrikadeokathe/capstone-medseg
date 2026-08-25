@@ -1,4 +1,7 @@
 data/
+data/nnunet_raw/
+data/nnunet_preprocessed/
+data/nnunet_results/
 checkpoints/
 models/checkpoints/
 *.pt

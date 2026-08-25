@@ -168,3 +168,67 @@ def list_braintumour_files(data_dir: str = "data"):
 
     print(f"Found {len(pairs)} matched scan/label pairs.")
     return pairs
+
+
+def download_liver_dataset(dest_dir=None):
+    """
+    Download and extract the MSD Task03_Liver dataset or sample volumes.
+    """
+    if dest_dir is None:
+        dest_dir = RAW_DIR
+    liver_path = os.path.join(dest_dir, "Task03_Liver")
+    images_dir = os.path.join(liver_path, "imagesTr")
+    labels_dir = os.path.join(liver_path, "labelsTr")
+    os.makedirs(images_dir, exist_ok=True)
+    os.makedirs(labels_dir, exist_ok=True)
+
+    if glob.glob(os.path.join(images_dir, "*.nii.gz")):
+        print(f"[INFO] Dataset already exists at {liver_path}, skipping download.")
+        return liver_path
+
+    import subprocess
+    hf_base = "https://huggingface.co/datasets/MedOtter/msd-liver/resolve/main"
+    sample_ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    for sid in sample_ids:
+        fname = f"liver_{sid}.nii.gz"
+        img_out = os.path.join(images_dir, fname)
+        lbl_out = os.path.join(labels_dir, fname)
+        if not os.path.exists(img_out):
+            subprocess.run(["curl", "-s", "-L", "-o", img_out, f"{hf_base}/imagesTr/{fname}"], check=True)
+        if not os.path.exists(lbl_out):
+            subprocess.run(["curl", "-s", "-L", "-o", lbl_out, f"{hf_base}/labelsTr/{fname}"], check=True)
+        print(f"  Downloaded {fname}")
+
+    print(f"[INFO] Liver dataset ready at {liver_path}")
+    return liver_path
+
+
+def list_liver_files(liver_dir=None):
+    """
+    Return matched lists of (scan_path, label_path) for the training split.
+    """
+    if liver_dir is None:
+        liver_dir = os.path.join(RAW_DIR, "Task03_Liver")
+
+    images_dir = os.path.join(liver_dir, "imagesTr")
+    labels_dir = os.path.join(liver_dir, "labelsTr")
+
+    scans = sorted(glob.glob(os.path.join(images_dir, "*.nii.gz")))
+    if not scans:
+        raise FileNotFoundError(
+            f"No scans found in {images_dir}. "
+            "Run download_liver_dataset() first."
+        )
+
+    pairs = []
+    for scan_path in scans:
+        basename = os.path.basename(scan_path)
+        label_path = os.path.join(labels_dir, basename)
+        if os.path.isfile(label_path):
+            pairs.append((scan_path, label_path))
+        else:
+            print(f"[WARN] No matching label for {basename}, skipping.")
+
+    print(f"[INFO] Found {len(pairs)} scan/label pairs.")
+    return pairs
+

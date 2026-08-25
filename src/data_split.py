@@ -190,6 +190,70 @@ def get_braintumour_splits(
     return train_dataset, val_dataset, test_dataset, split_sizes
 
 
+def get_liver_splits(
+    data_dir: str = "data/processed",
+    train_ratio: float = 0.60,
+    val_ratio: float = 0.20,
+    test_ratio: float = 0.20,
+    seed: int = 42,
+    num_support: int = 2,
+    target_size: tuple = (128, 128)
+):
+    """
+    Loads liver images and masks, splits into train/val/test sets, and creates Datasets.
+
+    Split ratio note (60/20/20):
+    MSD Task03 Liver contains only 57 slices (much smaller than Task09 Spleen's 305 or Task02 Heart's 1301).
+    A standard 70/15/15 split results in undersized validation and test sets (~8 slices each).
+    A 60/20/20 ratio (34 train / 11 val / 12 test) provides a more statistically sound validation
+    and evaluation set while leaving enough slices to train the fusion module.
+    """
+    images_path = os.path.join(data_dir, "liver_images.npy")
+    masks_path = os.path.join(data_dir, "liver_masks.npy")
+
+    if not os.path.exists(images_path) or not os.path.exists(masks_path):
+        from src.preprocessing import build_liver_dataset
+        build_liver_dataset(output_dir=data_dir)
+
+    images = np.load(images_path)  # (N, H, W)
+    masks = np.load(masks_path)    # (N, H, W)
+
+    total_slices = len(images)
+    indices = np.arange(total_slices)
+    
+    rng = np.random.RandomState(seed)
+    rng.shuffle(indices)
+
+    train_end = int(total_slices * train_ratio)
+    val_end = train_end + int(total_slices * val_ratio)
+
+    train_idx = indices[:train_end]
+    val_idx = indices[train_end:val_end]
+    test_idx = indices[val_end:]
+
+    print("==================================================")
+    print(" Data Split Statistics (MSD Task03 Liver)")
+    print("==================================================")
+    print(f"  Total Slices: {total_slices}")
+    print(f"  Train Set:    {len(train_idx)} slices ({len(train_idx)/total_slices*100:.1f}%)")
+    print(f"  Val Set:      {len(val_idx)} slices ({len(val_idx)/total_slices*100:.1f}%)")
+    print(f"  Test Set:     {len(test_idx)} slices ({len(test_idx)/total_slices*100:.1f}%)")
+    print("--------------------------------------------------")
+
+    train_dataset = InContextDataset(images[train_idx], masks[train_idx], num_support=num_support, target_size=target_size, seed=seed)
+    val_dataset = InContextDataset(images[val_idx], masks[val_idx], num_support=num_support, target_size=target_size, seed=seed)
+    test_dataset = InContextDataset(images[test_idx], masks[test_idx], num_support=num_support, target_size=target_size, seed=seed)
+
+    split_sizes = {
+        "total": total_slices,
+        "train": len(train_idx),
+        "val": len(val_idx),
+        "test": len(test_idx)
+    }
+
+    return train_dataset, val_dataset, test_dataset, split_sizes
+
+
 if __name__ == "__main__":
     print("Testing Spleen Dataset Splits...")
     tr_s, val_s, te_s, _ = get_spleen_splits()
@@ -206,4 +270,14 @@ if __name__ == "__main__":
     print(f"  Query Mask Shape:    {list(sample_b[1].shape)}")
     print(f"  Support Imgs Shape:  {list(sample_b[2].shape)}")
     print(f"  Support Masks Shape: {list(sample_b[3].shape)}")
+
+    print("\nTesting Liver Dataset Splits...")
+    tr_l, val_l, te_l, _ = get_liver_splits()
+    sample_l = tr_l[0]
+    print(f"  Query Img Shape:     {list(sample_l[0].shape)}")
+    print(f"  Query Mask Shape:    {list(sample_l[1].shape)}")
+    print(f"  Support Imgs Shape:  {list(sample_l[2].shape)}")
+    print(f"  Support Masks Shape: {list(sample_l[3].shape)}")
+
+
 

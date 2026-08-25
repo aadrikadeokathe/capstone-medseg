@@ -14,8 +14,9 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.data_split import get_spleen_splits, get_braintumour_splits
+from src.data_split import get_spleen_splits, get_braintumour_splits, get_liver_splits
 from src.models.in_context_model import InContextSegmentationModel
+
 
 
 def compute_dice_score(preds: torch.Tensor, targets: torch.Tensor, eps: float = 1e-8) -> float:
@@ -119,7 +120,7 @@ def evaluate(model, dataloader, criterion, device, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Train In-Context Fusion Model for Medical Segmentation")
-    parser.add_argument("--dataset", type=str, choices=["spleen", "braintumour"], default="spleen")
+    parser.add_argument("--dataset", type=str, choices=["spleen", "braintumour", "liver"], default="spleen")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
@@ -150,6 +151,12 @@ def main():
             target_size=(args.target_size, args.target_size)
         )
         in_channels = 1
+    elif args.dataset == "liver":
+        train_ds, val_ds, test_ds, split_sizes = get_liver_splits(
+            num_support=args.num_support,
+            target_size=(args.target_size, args.target_size)
+        )
+        in_channels = 1
     else:
         train_ds, val_ds, test_ds, split_sizes = get_braintumour_splits(
             num_support=args.num_support,
@@ -162,15 +169,18 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
     test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
-    # Instantiate model
+    # Instantiate model with frozen UniverSeg backbone
     model = InContextSegmentationModel(
         in_channels=in_channels,
-        feature_channels=[32, 64, 128],
+        feature_channels=[64, 64, 64],
         num_heads=4,
         dropout=0.1
     ).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    model.print_parameter_summary()
+
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=1e-4)
     criterion = BCEDiceLoss(bce_weight=0.5)
 
     os.makedirs("models/checkpoints", exist_ok=True)
@@ -223,19 +233,25 @@ def main():
     print(f"   Test Dice: {test_dice:.4f}")
     print("==================================================")
 
-    # Save log file
+    # Save log files
     log_file_path = f"logs/fusion_training_{args.dataset}.txt"
-    with open(log_file_path, "w") as f:
-        f.write(f"In-Context Fusion Model Training Log - {args.dataset.upper()}\n")
-        f.write("==================================================\n")
-        f.write(f"Epochs: {args.epochs}, Batch Size: {args.batch_size}, LR: {args.lr}\n")
-        f.write(f"Best Val Dice: {best_val_dice:.4f}\n")
-        f.write(f"Test Loss:     {test_loss:.4f}\n")
-        f.write(f"Test Dice:     {test_dice:.4f}\n\n")
-        f.write("Epoch,TrainLoss,TrainDice,ValLoss,ValDice\n")
-        for ep in range(len(history["train_loss"])):
-            f.write(f"{ep+1},{history['train_loss'][ep]:.4f},{history['train_dice'][ep]:.4f},"
-                    f"{history['val_loss'][ep]:.4f},{history['val_dice'][ep]:.4f}\n")
+    log_paths = [log_file_path]
+    if args.dataset == "liver":
+        log_paths.append("logs/liver_trained_scores.txt")
+
+    for path in log_paths:
+        with open(path, "w") as f:
+            f.write(f"In-Context Fusion Model Training Log - {args.dataset.upper()}\n")
+            f.write("==================================================\n")
+            f.write(f"Epochs: {args.epochs}, Batch Size: {args.batch_size}, LR: {args.lr}\n")
+            f.write(f"Best Val Dice: {best_val_dice:.4f}\n")
+            f.write(f"Test Loss:     {test_loss:.4f}\n")
+            f.write(f"Test Dice:     {test_dice:.4f}\n\n")
+            f.write("Epoch,TrainLoss,TrainDice,ValLoss,ValDice\n")
+            for ep in range(len(history["train_loss"])):
+                f.write(f"{ep+1},{history['train_loss'][ep]:.4f},{history['train_dice'][ep]:.4f},"
+                        f"{history['val_loss'][ep]:.4f},{history['val_dice'][ep]:.4f}\n")
+
 
     # Plot curves
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))

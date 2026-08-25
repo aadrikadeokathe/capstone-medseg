@@ -197,6 +197,7 @@ def download_liver_dataset(dest_dir=None):
     hf_base = "https://huggingface.co/datasets/MedOtter/msd-liver/resolve/main"
 
     print(f"[INFO] Downloading Liver dataset subset ({len(sample_ids)} volumes) from Hugging Face mirror …")
+    import subprocess
     for sid in sample_ids:
         fname = f"liver_{sid}.nii.gz"
         img_out = os.path.join(images_dir, fname)
@@ -216,7 +217,7 @@ def list_liver_files(liver_dir=None):
     Return matched lists of (scan_path, label_path) for Task03 Liver.
     """
     if liver_dir is None:
-        liver_dir = LIVER_DIR
+        liver_dir = os.path.join(RAW_DIR, "Task03_Liver")
 
     images_dir = os.path.join(liver_dir, "imagesTr")
     labels_dir = os.path.join(liver_dir, "labelsTr")
@@ -285,7 +286,7 @@ def list_heart_files(heart_dir=None):
     Return matched lists of (scan_path, label_path) for Task02 Heart.
     """
     if heart_dir is None:
-        heart_dir = HEART_DIR
+        heart_dir = os.path.join(RAW_DIR, "Task02_Heart")
 
     images_dir = os.path.join(heart_dir, "imagesTr")
     labels_dir = os.path.join(heart_dir, "labelsTr")
@@ -308,3 +309,4 @@ def list_heart_files(heart_dir=None):
 
     print(f"[INFO] Found {len(pairs)} scan/label pairs for Heart.")
     return pairs
+

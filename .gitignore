@@ -1,5 +1,7 @@
 data/
 checkpoints/
+models/checkpoints/
+*.pt
 *.nii.gz
 __pycache__/
 *.pyc
@@ -8,3 +10,4 @@ venv/
 .DS_Store
 external/
 *.npy
+

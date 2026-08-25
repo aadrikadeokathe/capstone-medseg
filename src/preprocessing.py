@@ -303,7 +303,52 @@ def build_braintumour_dataset(data_dir: str = "data", output_dir: str = "data/pr
     return images_mm, masks_mm
 
 
+def build_liver_dataset(output_dir=None):
+    """
+    Process all liver training scan/label pairs and save as two numpy arrays:
+      - liver_images.npy  (N, H, W) float32
+      - liver_masks.npy   (N, H, W) uint8
+    """
+    from src.data_loading import list_liver_files, download_liver_dataset
+
+    if output_dir is None:
+        output_dir = PROCESSED_DIR
+    os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        pairs = list_liver_files()
+    except FileNotFoundError:
+        download_liver_dataset()
+        pairs = list_liver_files()
+
+    all_images = []
+    all_masks = []
+
+    for idx, (scan_path, mask_path) in enumerate(pairs):
+        basename = os.path.basename(scan_path)
+        slices = extract_slices(scan_path, mask_path)
+        print(f"  [{idx+1:02d}/{len(pairs)}] {basename}: {len(slices)} slices extracted")
+        for img, msk in slices:
+            all_images.append(img)
+            all_masks.append(msk)
+
+    images = np.stack(all_images, axis=0)  # (N, H, W)
+    masks = np.stack(all_masks, axis=0)    # (N, H, W)
+
+    img_path = os.path.join(output_dir, "liver_images.npy")
+    msk_path = os.path.join(output_dir, "liver_masks.npy")
+    np.save(img_path, images)
+    np.save(msk_path, masks)
+
+    print(f"\n[INFO] Saved {images.shape[0]} liver slices")
+    print(f"  Images: {img_path}  shape={images.shape}  dtype={images.dtype}")
+    print(f"  Masks:  {msk_path}  shape={masks.shape}  dtype={masks.dtype}")
+
+    return images, masks
+
+
 if __name__ == "__main__":
     build_spleen_dataset()
     build_liver_dataset()
     build_heart_dataset()
+

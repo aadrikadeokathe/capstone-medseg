@@ -203,7 +203,7 @@ if __name__ == "__main__":
     print(" Testing InContextSegmentationModel with Stacked Fusion")
     print("==================================================")
 
-    for num_layers in [1, 2, 3, 4]:
+    for num_layers in [1, 3, 5]:
         print(f"\n--- Testing num_layers = {num_layers} ---")
         model = InContextSegmentationModel(in_channels=1, feature_channels=[64, 64, 64], num_heads=4, num_layers=num_layers)
         model.print_parameter_summary()

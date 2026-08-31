@@ -51,6 +51,7 @@ class InContextSegmentationModel(nn.Module):
         in_channels: int = 1,
         feature_channels: list = [64, 64, 64],
         num_heads: int = 4,
+        num_layers: int = 3,
         dropout: float = 0.1,
         backbone: nn.Module = None
     ):
@@ -59,11 +60,13 @@ class InContextSegmentationModel(nn.Module):
             in_channels (int): Input image channels (1 for grayscale/CT/FLAIR, 4 for multi-modal MRI).
             feature_channels (list): Features at [stage1, stage2, bottleneck]. Default: [64, 64, 64].
             num_heads (int): Cross-attention heads in FusionModule.
+            num_layers (int): Number of stacked cross-attention layers in FusionModule. Default: 3.
             dropout (float): Dropout probability.
             backbone (nn.Module, optional): Pretrained UniverSeg backbone module. Loaded automatically if None.
         """
         super().__init__()
         self.in_channels = in_channels
+        self.num_layers = num_layers
         c1, c2, c3 = feature_channels
 
         # 1. Frozen Pretrained Backbone (UniverSeg)
@@ -76,8 +79,8 @@ class InContextSegmentationModel(nn.Module):
         for p in self.backbone.parameters():
             p.requires_grad = False
 
-        # 2. Bottleneck Cross-Attention Fusion Module (Trainable)
-        self.fusion = FusionModule(channels=c3, num_heads=num_heads, dropout=dropout)
+        # 2. Bottleneck Cross-Attention Fusion Module (Trainable, Stacked Multi-Layer)
+        self.fusion = FusionModule(channels=c3, num_heads=num_heads, num_layers=num_layers, dropout=dropout)
 
         # 3. Decoder stages (Trainable, with skip connections from Query frozen backbone)
         self.up2 = nn.ConvTranspose2d(c3, c2, kernel_size=2, stride=2)
@@ -197,13 +200,16 @@ class InContextSegmentationModel(nn.Module):
 
 if __name__ == "__main__":
     print("==================================================")
-    print(" Testing InContextSegmentationModel with Frozen Backbone")
+    print(" Testing InContextSegmentationModel with Stacked Fusion")
     print("==================================================")
 
-    model = InContextSegmentationModel(in_channels=1, feature_channels=[64, 64, 64], num_heads=4)
-    model.print_parameter_summary()
+    for num_layers in [1, 2, 3, 4]:
+        print(f"\n--- Testing num_layers = {num_layers} ---")
+        model = InContextSegmentationModel(in_channels=1, feature_channels=[64, 64, 64], num_heads=4, num_layers=num_layers)
+        model.print_parameter_summary()
 
-    # Test single-channel input
+    # Detailed shape verification for default depth (num_layers=3)
+    model = InContextSegmentationModel(in_channels=1, feature_channels=[64, 64, 64], num_heads=4, num_layers=3)
     B, S, C_in, H, W = 2, 2, 1, 128, 128
     query_img = torch.randn(B, C_in, H, W)
     support_imgs = torch.randn(B, S, C_in, H, W)
@@ -213,7 +219,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         out_logits = model(query_img, support_imgs, support_masks)
 
-    print(f"Single-Channel Input Logits Shape: {list(out_logits.shape)}")
+    print(f"\nSingle-Channel Input Logits Shape: {list(out_logits.shape)}")
     assert out_logits.shape == (B, 1, H, W), f"Expected {(B, 1, H, W)}, got {out_logits.shape}"
 
     # Test multi-channel input (4-channel BrainTumour MRI)
@@ -228,5 +234,5 @@ if __name__ == "__main__":
     assert out_logits_m.shape == (B, 1, H, W), f"Expected {(B, 1, H, W)}, got {out_logits_m.shape}"
 
     print("--------------------------------------------------")
-    print("SUCCESS: InContextSegmentationModel forward pass verified for single-channel and multi-channel inputs!")
+    print("SUCCESS: InContextSegmentationModel forward pass verified for single-channel and multi-channel inputs across depths!")
     print("==================================================")

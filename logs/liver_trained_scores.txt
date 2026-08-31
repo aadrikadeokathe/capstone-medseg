@@ -1,9 +1,13 @@
 In-Context Fusion Model Training Log - LIVER
 ==================================================
-Epochs: 1, Batch Size: 2, LR: 0.001
-Best Val Dice: 0.4118
-Test Loss:     0.7349
-Test Dice:     0.4806
+Epochs: 5, Batch Size: 4, LR: 0.001
+Best Val Dice: 0.8914
+Test Loss:     0.0863
+Test Dice:     0.8811
 
 Epoch,TrainLoss,TrainDice,ValLoss,ValDice
-1,0.7247,0.2906,0.7482,0.4118
+1,0.2975,0.7080,0.1983,0.7457
+2,0.1431,0.8074,0.2045,0.7412
+3,0.1188,0.8361,0.1023,0.8599
+4,0.1033,0.8587,0.1064,0.8593
+5,0.0896,0.8785,0.0833,0.8914

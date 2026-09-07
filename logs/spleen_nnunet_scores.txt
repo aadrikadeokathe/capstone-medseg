@@ -1,0 +1,19 @@
+nnU-Net Specialist Baseline - Spleen (CT)
+==========================================
+Architecture: nnUNetTrainer_250epochs, 2D configuration
+Training volumes: 10 (MSD Task09 Spleen subset)
+Validation: internal 5-fold, fold 0
+
+Foreground Mean Dice: 0.9130
+IoU: 0.8448
+
+Per-case Dice scores:
+spleen_10: 0.9660
+spleen_13: 0.9236
+spleen_14: 0.9772
+spleen_17: 0.8693
+spleen_31: 0.9074
+spleen_33: 0.9639
+spleen_44: 0.7957
+spleen_47: 0.9517
+spleen_56: 0.8623

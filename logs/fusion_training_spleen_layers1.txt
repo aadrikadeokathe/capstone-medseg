@@ -1,0 +1,13 @@
+In-Context Fusion Model Training Log - SPLEEN (num_layers=1)
+==================================================
+Epochs: 5, Batch Size: 8, LR: 0.001, Seed: 42
+Best Val Dice: 0.7690
+Test Loss:     0.3125
+Test Dice:     0.7496
+
+Epoch,TrainLoss,TrainDice,ValLoss,ValDice
+1,0.6287,0.2295,0.5496,0.2467
+2,0.5000,0.5406,0.4731,0.5377
+3,0.3979,0.6757,0.4182,0.5293
+4,0.3060,0.7329,0.2879,0.7690
+5,0.2229,0.7804,0.2095,0.7689

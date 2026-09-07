@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.data_split import get_spleen_splits, get_braintumour_splits, get_heart_splits, get_liver_splits
+from src.data_split import get_spleen_splits, get_braintumour_splits, get_liver_splits
 from src.models.in_context_model import InContextSegmentationModel
 
 
@@ -120,15 +120,23 @@ def evaluate(model, dataloader, criterion, device, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Train In-Context Fusion Model for Medical Segmentation")
-    parser.add_argument("--dataset", type=str, choices=["spleen", "braintumour", "heart", "liver"], default="spleen")
+    parser.add_argument("--dataset", type=str, choices=["spleen", "braintumour", "liver"], default="spleen")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--num_support", type=int, default=2, help="Number of support slices per sample")
+    parser.add_argument("--num_layers", type=int, default=3, help="Number of stacked cross-attention layers in FusionModule")
     parser.add_argument("--target_size", type=int, default=128, help="Spatial resolution (H=W)")
     parser.add_argument("--channel_idx", type=int, default=0, help="Channel index for BrainTumour (0=FLAIR)")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--dry_run", action="store_true", help="Run quick 2-step verification run")
     args = parser.parse_args()
+
+    # Set random seeds for exact reproducibility
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("==================================================")
@@ -140,6 +148,8 @@ def main():
     print(f" Batch Size:     {args.batch_size}")
     print(f" Learning Rate:  {args.lr}")
     print(f" Support Count:  {args.num_support}")
+    print(f" Fusion Layers:  {args.num_layers}")
+    print(f" Random Seed:    {args.seed}")
     print(f" Target Size:    ({args.target_size}, {args.target_size})")
     print(f" Dry Run Mode:   {args.dry_run}")
     print("--------------------------------------------------")
@@ -147,12 +157,6 @@ def main():
     # Load dataset splits
     if args.dataset == "spleen":
         train_ds, val_ds, test_ds, split_sizes = get_spleen_splits(
-            num_support=args.num_support,
-            target_size=(args.target_size, args.target_size)
-        )
-        in_channels = 1
-    elif args.dataset == "heart":
-        train_ds, val_ds, test_ds, split_sizes = get_heart_splits(
             num_support=args.num_support,
             target_size=(args.target_size, args.target_size)
         )
@@ -180,6 +184,7 @@ def main():
         in_channels=in_channels,
         feature_channels=[64, 64, 64],
         num_heads=4,
+        num_layers=args.num_layers,
         dropout=0.1
     ).to(device)
 
@@ -191,7 +196,7 @@ def main():
 
     os.makedirs("models/checkpoints", exist_ok=True)
     os.makedirs("logs", exist_ok=True)
-    checkpoint_path = f"models/checkpoints/best_fusion_model_{args.dataset}.pt"
+    checkpoint_path = f"models/checkpoints/best_fusion_model_{args.dataset}_layers{args.num_layers}.pt"
 
     best_val_dice = -1.0
     history = {"train_loss": [], "train_dice": [], "val_loss": [], "val_dice": []}
@@ -216,7 +221,8 @@ def main():
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "val_dice": val_dice,
-                "dataset": args.dataset
+                "dataset": args.dataset,
+                "num_layers": args.num_layers
             }, checkpoint_path)
 
         print(f"Epoch [{epoch:02d}/{args.epochs:02d}] "
@@ -234,35 +240,24 @@ def main():
 
     test_loss, test_dice = evaluate(model, test_loader, criterion, device, dry_run=args.dry_run)
     print("==================================================")
-    print(f" Test Set Results ({args.dataset.upper()}):")
+    print(f" Test Set Results ({args.dataset.upper()} - Layers={args.num_layers}):")
     print(f"   Test Loss: {test_loss:.4f}")
     print(f"   Test Dice: {test_dice:.4f}")
     print("==================================================")
 
     # Save log files
-    log_file_path = f"logs/fusion_training_{args.dataset}.txt"
-    trained_scores_path = f"logs/{args.dataset}_trained_scores.txt"
-    
-    log_content = (
-        f"In-Context Fusion Model Training Log - {args.dataset.upper()}\n"
-        "==================================================\n"
-        f"Epochs: {args.epochs}, Batch Size: {args.batch_size}, LR: {args.lr}\n"
-        f"Best Val Dice: {best_val_dice:.4f}\n"
-        f"Test Loss:     {test_loss:.4f}\n"
-        f"Test Dice:     {test_dice:.4f}\n\n"
-        "Epoch,TrainLoss,TrainDice,ValLoss,ValDice\n"
-    )
-    for ep in range(len(history["train_loss"])):
-        log_content += (
-            f"{ep+1},{history['train_loss'][ep]:.4f},{history['train_dice'][ep]:.4f},"
-            f"{history['val_loss'][ep]:.4f},{history['val_dice'][ep]:.4f}\n"
-        )
-
+    log_file_path = f"logs/fusion_training_{args.dataset}_layers{args.num_layers}.txt"
     with open(log_file_path, "w") as f:
-        f.write(log_content)
-
-    with open(trained_scores_path, "w") as f:
-        f.write(log_content)
+        f.write(f"In-Context Fusion Model Training Log - {args.dataset.upper()} (num_layers={args.num_layers})\n")
+        f.write("==================================================\n")
+        f.write(f"Epochs: {args.epochs}, Batch Size: {args.batch_size}, LR: {args.lr}, Seed: {args.seed}\n")
+        f.write(f"Best Val Dice: {best_val_dice:.4f}\n")
+        f.write(f"Test Loss:     {test_loss:.4f}\n")
+        f.write(f"Test Dice:     {test_dice:.4f}\n\n")
+        f.write("Epoch,TrainLoss,TrainDice,ValLoss,ValDice\n")
+        for ep in range(len(history["train_loss"])):
+            f.write(f"{ep+1},{history['train_loss'][ep]:.4f},{history['train_dice'][ep]:.4f},"
+                    f"{history['val_loss'][ep]:.4f},{history['val_dice'][ep]:.4f}\n")
 
 
     # Plot curves
@@ -285,10 +280,10 @@ def main():
     axes[1].grid(True)
 
     plt.tight_layout()
-    curve_plot_path = f"logs/fusion_training_curves_{args.dataset}.png"
+    curve_plot_path = f"logs/fusion_training_curves_{args.dataset}_layers{args.num_layers}.png"
     plt.savefig(curve_plot_path, dpi=150)
     plt.close()
-    print(f"Saved training log to {log_file_path} and {trained_scores_path}")
+    print(f"Saved training log to {log_file_path}")
     print(f"Saved curves plot to {curve_plot_path}")
 
 

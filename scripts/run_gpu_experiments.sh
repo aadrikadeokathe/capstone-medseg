@@ -98,7 +98,7 @@ python src/train_episodic.py \
 # ------------------------------------------------------------------------------
 echo ""
 echo "=================================================================="
-echo "[4/5] Running Shot-Count Ablation on Joint Episodic Checkpoint..."
+echo "[4/6] Running Shot-Count Ablation on Joint Episodic Checkpoint..."
 echo "=================================================================="
 python src/evaluate_shot_ablation.py \
     --checkpoint models/checkpoints/best_fusion_episodic.pt \
@@ -106,13 +106,47 @@ python src/evaluate_shot_ablation.py \
     --output_txt logs/shot_ablation_results.txt \
     --output_png logs/shot_ablation_curve.png
 
+# ------------------------------------------------------------------------------
+# EXPERIMENT 4: Multi-Seed Robustness Runs (Seeds 123, 456 for Error Bars)
+# ------------------------------------------------------------------------------
 echo ""
 echo "=================================================================="
-echo "[5/5] All GPU Experiments Completed Successfully!"
+echo "[5/6] Running Multi-Seed Robustness Runs (Seeds 123, 456)..."
+echo "=================================================================="
+if [ "$1" != "--skip-seeds" ]; then
+    echo "  -> Running Seed 123..."
+    python src/train_episodic.py \
+        --epochs 30 \
+        --episodes_per_epoch 500 \
+        --num_layers 3 \
+        --lr 1e-3 \
+        --num_support 2 \
+        --seed 123 \
+        --checkpoint models/checkpoints/best_fusion_episodic_seed123.pt \
+        --results_file logs/episodic_zeroshot_results_seed123.txt
+
+    echo "  -> Running Seed 456..."
+    python src/train_episodic.py \
+        --epochs 30 \
+        --episodes_per_epoch 500 \
+        --num_layers 3 \
+        --lr 1e-3 \
+        --num_support 2 \
+        --seed 456 \
+        --checkpoint models/checkpoints/best_fusion_episodic_seed456.pt \
+        --results_file logs/episodic_zeroshot_results_seed456.txt
+else
+    echo "  -> Skipping multi-seed runs (--skip-seeds passed)."
+fi
+
+echo ""
+echo "=================================================================="
+echo "[6/6] All GPU Experiments (Jobs 1 to 7) Completed Successfully!"
 echo " Timestamp: $(date)"
 echo " Results Summary:"
-echo "   - Main Episodic Log:    logs/episodic_training.txt"
-echo "   - Main Zero-Shot Table: logs/episodic_zeroshot_results.txt"
-echo "   - LODO Matrix Files:    logs/episodic_lodo_*.txt"
-echo "   - Shot Ablation Table:  logs/shot_ablation_results.txt"
+echo "   - Main Episodic Log (Seed 42):  logs/episodic_training.txt"
+echo "   - Main Zero-Shot Table:         logs/episodic_zeroshot_results.txt"
+echo "   - LODO Matrix Files:            logs/episodic_lodo_*.txt"
+echo "   - Shot Ablation Table:          logs/shot_ablation_results.txt"
+echo "   - Multi-Seed Results:           logs/episodic_zeroshot_results_seed*.txt"
 echo "=================================================================="

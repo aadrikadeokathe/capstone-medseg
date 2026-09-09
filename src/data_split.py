@@ -15,15 +15,34 @@ class InContextDataset(Dataset):
       - support_masks: [S, 1, H, W] tensor (support set context binary masks)
     """
 
-    def __init__(self, images: np.ndarray, masks: np.ndarray, num_support: int = 2, target_size: tuple = (128, 128), seed: int = 42):
+    def __init__(
+        self,
+        images: np.ndarray,
+        masks: np.ndarray,
+        num_support: int = 2,
+        target_size: tuple = (128, 128),
+        seed: int = 42,
+        indices: np.ndarray = None,
+        channel_idx: int = None
+    ):
         self.images = images
         self.masks = masks
         self.num_support = num_support
         self.target_size = target_size
         self.rng = np.random.RandomState(seed)
+        self.indices = indices
+        self.channel_idx = channel_idx
 
     def __len__(self):
-        return len(self.images)
+        return len(self.indices) if self.indices is not None else len(self.images)
+
+    def _get_slice(self, idx: int):
+        real_idx = self.indices[idx] if self.indices is not None else idx
+        img = self.images[real_idx]
+        if self.channel_idx is not None and img.ndim == 3 and img.shape[-1] == 4:
+            img = img[:, :, self.channel_idx]
+        mask = self.masks[real_idx]
+        return img, mask
 
     def _resize(self, array: np.ndarray, is_mask: bool = False) -> torch.Tensor:
         if array.ndim == 2:
@@ -42,18 +61,24 @@ class InContextDataset(Dataset):
 
     def __getitem__(self, idx: int):
         # Query sample
-        query_img = self._resize(self.images[idx], is_mask=False)
-        query_mask = self._resize(self.masks[idx] > 0, is_mask=True)
+        img, mask = self._get_slice(idx)
+        query_img = self._resize(img, is_mask=False)
+        query_mask = self._resize(mask > 0, is_mask=True)
 
         # Support set selection (exclude current query slice)
-        available_indices = [i for i in range(len(self.images)) if i != idx]
+        total = len(self)
+        available_indices = [i for i in range(total) if i != idx]
         if len(available_indices) < self.num_support:
             support_indices = available_indices
         else:
             support_indices = self.rng.choice(available_indices, size=self.num_support, replace=False)
 
-        support_imgs_list = [self._resize(self.images[si], is_mask=False) for si in support_indices]
-        support_masks_list = [self._resize(self.masks[si] > 0, is_mask=True) for si in support_indices]
+        support_imgs_list = []
+        support_masks_list = []
+        for si in support_indices:
+            s_img, s_mask = self._get_slice(si)
+            support_imgs_list.append(self._resize(s_img, is_mask=False))
+            support_masks_list.append(self._resize(s_mask > 0, is_mask=True))
 
         support_imgs = torch.stack(support_imgs_list, dim=0)   # [S, C, H, W]
         support_masks = torch.stack(support_masks_list, dim=0) # [S, 1, H, W]
@@ -148,13 +173,7 @@ def get_braintumour_splits(
     images_mm = np.load(images_path, mmap_mode="r")  # (N, H, W, 4)
     masks_mm = np.load(masks_path, mmap_mode="r")    # (N, H, W)
 
-    if channel_idx is not None:
-        images = images_mm[:, :, :, channel_idx]     # (N, H, W)
-    else:
-        images = images_mm                           # (N, H, W, 4)
-    masks = masks_mm
-
-    total_slices = len(images)
+    total_slices = len(images_mm)
     indices = np.arange(total_slices)
     
     rng = np.random.RandomState(seed)
@@ -176,9 +195,9 @@ def get_braintumour_splits(
     print(f"  Test Set:     {len(test_idx)} slices ({len(test_idx)/total_slices*100:.1f}%)")
     print("--------------------------------------------------")
 
-    train_dataset = InContextDataset(images[train_idx], masks[train_idx], num_support=num_support, target_size=target_size, seed=seed)
-    val_dataset = InContextDataset(images[val_idx], masks[val_idx], num_support=num_support, target_size=target_size, seed=seed)
-    test_dataset = InContextDataset(images[test_idx], masks[test_idx], num_support=num_support, target_size=target_size, seed=seed)
+    train_dataset = InContextDataset(images_mm, masks_mm, num_support=num_support, target_size=target_size, seed=seed, indices=train_idx, channel_idx=channel_idx)
+    val_dataset = InContextDataset(images_mm, masks_mm, num_support=num_support, target_size=target_size, seed=seed, indices=val_idx, channel_idx=channel_idx)
+    test_dataset = InContextDataset(images_mm, masks_mm, num_support=num_support, target_size=target_size, seed=seed, indices=test_idx, channel_idx=channel_idx)
 
     split_sizes = {
         "total": total_slices,

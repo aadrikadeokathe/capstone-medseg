@@ -13,4 +13,7 @@ venv/
 .DS_Store
 external/
 *.npy
+node_modules/
+package*.json
+*.pptx
 

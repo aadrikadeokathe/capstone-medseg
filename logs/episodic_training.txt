@@ -1,0 +1,7 @@
+Episodic Meta-Learning Training Log
+==================================================
+Epochs: 2, Episodes/Epoch: 50, LR: 0.001, Support: 2, DryRun: True
+
+Epoch,TrainLoss,TrainDice,ValDice_spleen,ValDice_liver,ValDice_heart,ValDice_braintumour,AvgValDice
+1,0.6413,0.2108,0.1681,0.4159,0.1854,0.5381,0.3269
+2,0.4867,0.3824,0.1826,0.5715,0.1803,0.4631,0.3494

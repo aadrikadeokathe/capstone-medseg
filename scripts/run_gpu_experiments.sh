@@ -6,16 +6,45 @@
 # Image Segmentation Experiments.
 # ==============================================================================
 
-set -e
+# Ensure script runs from the repository root directory regardless of where it is invoked
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
+
+# Auto-detect python binary (prefer active python/python3)
+if command -v python3 &>/dev/null; then
+    PY="python3"
+elif command -v python &>/dev/null; then
+    PY="python"
+else
+    echo "ERROR: Neither 'python3' nor 'python' was found in your PATH!"
+    echo "Please activate your virtual environment or conda environment first."
+    exit 1
+fi
 
 echo "=================================================================="
 echo " Starting Medical Segmentation GPU Training Pipeline"
+echo " Repo Root: $REPO_ROOT"
+echo " Python Binary: $($PY -c 'import sys; print(sys.executable)')"
 echo " Timestamp: $(date)"
 echo "=================================================================="
 
 # Check GPU availability
-echo "[1/5] Checking GPU Environment..."
-python -c "import torch; print(f'PyTorch Version: {torch.__version__}'); print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\"}')"
+echo ""
+echo "[1/6] Checking GPU Environment..."
+$PY -c "
+import torch
+print(f'PyTorch Version: {torch.__version__}')
+cuda_avail = torch.cuda.is_available()
+print(f'CUDA Available: {cuda_avail}')
+if cuda_avail:
+    print(f'Device Count: {torch.cuda.device_count()}')
+    print(f'Device Name: {torch.cuda.get_device_name(0)}')
+    print(f'VRAM Total: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB')
+else:
+    print('WARNING: CUDA is NOT available! PyTorch will run on CPU.')
+"
 
 mkdir -p models/checkpoints
 mkdir -p logs
@@ -25,9 +54,9 @@ mkdir -p logs
 # ------------------------------------------------------------------------------
 echo ""
 echo "=================================================================="
-echo "[2/5] Running Joint Episodic Meta-Learning Training (30 Epochs)..."
+echo "[2/6] Running Joint Episodic Meta-Learning Training (30 Epochs)..."
 echo "=================================================================="
-python src/train_episodic.py \
+$PY -u src/train_episodic.py \
     --epochs 30 \
     --episodes_per_epoch 500 \
     --num_layers 3 \
@@ -42,11 +71,11 @@ python src/train_episodic.py \
 # ------------------------------------------------------------------------------
 echo ""
 echo "=================================================================="
-echo "[3/5] Running Leave-One-Dataset-Out Zero-Shot Verification..."
+echo "[3/6] Running Leave-One-Dataset-Out Zero-Shot Verification..."
 echo "=================================================================="
 
 echo "  -> (A) Held-Out Target: SPLEEN (Train on Liver, Heart, BrainTumour)"
-python src/train_episodic.py \
+$PY -u src/train_episodic.py \
     --train_datasets liver heart braintumour \
     --test_dataset spleen \
     --epochs 25 \
@@ -58,7 +87,7 @@ python src/train_episodic.py \
     --results_file logs/episodic_lodo_spleen.txt
 
 echo "  -> (B) Held-Out Target: LIVER (Train on Spleen, Heart, BrainTumour)"
-python src/train_episodic.py \
+$PY -u src/train_episodic.py \
     --train_datasets spleen heart braintumour \
     --test_dataset liver \
     --epochs 25 \
@@ -70,7 +99,7 @@ python src/train_episodic.py \
     --results_file logs/episodic_lodo_liver.txt
 
 echo "  -> (C) Held-Out Target: HEART (Train on Spleen, Liver, BrainTumour)"
-python src/train_episodic.py \
+$PY -u src/train_episodic.py \
     --train_datasets spleen liver braintumour \
     --test_dataset heart \
     --epochs 25 \
@@ -82,7 +111,7 @@ python src/train_episodic.py \
     --results_file logs/episodic_lodo_heart.txt
 
 echo "  -> (D) Held-Out Target: BRAINTUMOUR (Train on Spleen, Liver, Heart)"
-python src/train_episodic.py \
+$PY -u src/train_episodic.py \
     --train_datasets spleen liver heart \
     --test_dataset braintumour \
     --epochs 25 \
@@ -100,7 +129,7 @@ echo ""
 echo "=================================================================="
 echo "[4/6] Running Shot-Count Ablation on Joint Episodic Checkpoint..."
 echo "=================================================================="
-python src/evaluate_shot_ablation.py \
+$PY -u src/evaluate_shot_ablation.py \
     --checkpoint models/checkpoints/best_fusion_episodic.pt \
     --shots 1 2 4 8 \
     --output_txt logs/shot_ablation_results.txt \
@@ -115,7 +144,7 @@ echo "[5/6] Running Multi-Seed Robustness Runs (Seeds 123, 456)..."
 echo "=================================================================="
 if [ "$1" != "--skip-seeds" ]; then
     echo "  -> Running Seed 123..."
-    python src/train_episodic.py \
+    $PY -u src/train_episodic.py \
         --epochs 30 \
         --episodes_per_epoch 500 \
         --num_layers 3 \
@@ -126,7 +155,7 @@ if [ "$1" != "--skip-seeds" ]; then
         --results_file logs/episodic_zeroshot_results_seed123.txt
 
     echo "  -> Running Seed 456..."
-    python src/train_episodic.py \
+    $PY -u src/train_episodic.py \
         --epochs 30 \
         --episodes_per_epoch 500 \
         --num_layers 3 \
@@ -141,7 +170,7 @@ fi
 
 echo ""
 echo "=================================================================="
-echo "[6/6] All GPU Experiments (Jobs 1 to 7) Completed Successfully!"
+echo "[6/6] All GPU Experiments Completed Successfully!"
 echo " Timestamp: $(date)"
 echo " Results Summary:"
 echo "   - Main Episodic Log (Seed 42):  logs/episodic_training.txt"

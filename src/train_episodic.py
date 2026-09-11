@@ -41,13 +41,23 @@ THEORETICAL FOUNDATION & METHODS DESCRIPTION (FOR PAPER / REPORT)
 
 import os
 import sys
-import argparse
 import time
+
+print("[1/5] Starting train_episodic.py...", flush=True)
+print("[2/5] Loading PyTorch & CUDA libraries (first load on Windows can take 15-30s)...", flush=True)
+
+import argparse
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
+
+print(f"      -> PyTorch v{torch.__version__} loaded successfully.", flush=True)
+print(f"      -> CUDA Available: {torch.cuda.is_available()}", flush=True)
+if torch.cuda.is_available():
+    print(f"      -> GPU Device: {torch.cuda.get_device_name(0)}", flush=True)
+
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

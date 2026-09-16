@@ -1,12 +1,13 @@
 Few-Shot Support Context Ablation Results
 ==================================================
-Checkpoint: models/checkpoints/best_fusion_episodic.pt
+Mode: in_domain
+Checkpoints: Per-Dataset In-Domain Adapters (Spleen, Liver, Heart, BrainTumour)
 
 Dataset        | K=1 Shot | K=2 Shot | K=4 Shot | K=8 Shot
 ----------------------------------------------------------
-spleen         | 0.1561    | 0.1565    | 0.1561    | 0.1563   
-liver          | 0.6259    | 0.6251    | 0.6239    | 0.6241   
-heart          | 0.4228    | 0.4229    | 0.4239    | 0.4238   
-braintumour    | 0.3955    | 0.3951    | 0.3949    | 0.3947   
+spleen         | 0.9354    | 0.9356    | 0.9357    | 0.9359   
+liver          | 0.7870    | 0.7871    | 0.7870    | 0.7869   
+heart          | 0.8096    | 0.8072    | 0.8054    | 0.8041   
+braintumour    | 0.7730    | 0.7731    | 0.7730    | 0.7731   
 ----------------------------------------------------------
-AVERAGE        | 0.4001    | 0.3999    | 0.3997    | 0.3997   
+AVERAGE        | 0.8263    | 0.8258    | 0.8253    | 0.8250   

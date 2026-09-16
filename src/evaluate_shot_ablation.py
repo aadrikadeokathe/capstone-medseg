@@ -33,13 +33,15 @@ from src.train_episodic import evaluate_dataset_split, SUPPORTED_DATASETS
 
 
 def run_shot_ablation(
-    checkpoint_path: str,
+    checkpoint_path: str = "models/checkpoints/best_fusion_episodic.pt",
     shot_counts: list = [1, 2, 4, 8],
     datasets: list = None,
     dry_run: bool = False,
     device: torch.device = None,
     output_txt: str = "logs/shot_ablation_results.txt",
     output_png: str = "logs/shot_ablation_curve.png",
+    mode: str = "in_domain",
+    max_steps: int = 6,
 ):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,32 +49,67 @@ def run_shot_ablation(
     eval_datasets = datasets if datasets is not None else list(SUPPORTED_DATASETS)
 
     print("==================================================")
-    print(" Running Shot-Count Ablation (K in {1, 2, 4, 8})")
+    print(f" Running Shot-Count Ablation (K in {shot_counts}) [Mode: {mode}]")
     print("==================================================")
-    print(f" Checkpoint:  {checkpoint_path}")
+    print(f" Mode:        {mode}")
     print(f" Shots:       {shot_counts}")
     print(f" Datasets:    {eval_datasets}")
     print(f" Device:      {device}")
     print(f" Dry Run:     {dry_run}")
+    print(f" Max Steps:   {max_steps if not dry_run else 2}")
     print("--------------------------------------------------")
 
-    if not os.path.exists(checkpoint_path):
-        raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
-
-    model = InContextSegmentationModel(
-        in_channels=1,
-        feature_channels=[64, 64, 64],
-        num_heads=4,
-        num_layers=3,
-        dropout=0.1,
-    ).to(device)
-
-    ckpt = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(ckpt["model_state_dict"])
-    model.eval()
-
     criterion = BCEDiceLoss(bce_weight=0.5)
-    max_steps = 2 if dry_run else None
+    eval_max_steps = 2 if dry_run else max_steps
+
+    # In-domain model mapping: (checkpoint_path, num_layers)
+    in_domain_checkpoints = {
+        "spleen": ("models/checkpoints/best_fusion_model_spleen_layers3.pt", 3),
+        "liver": ("models/checkpoints/best_fusion_model_liver_layers3.pt", 3),
+        "heart": ("models/checkpoints/best_fusion_model_heart.pt", 1),
+        "braintumour": ("models/checkpoints/best_fusion_model_braintumour_layers3.pt", 3),
+    }
+
+    # Preload models
+    models = {}
+    if mode == "in_domain":
+        for ds_name in eval_datasets:
+            ckpt_p, num_layers = in_domain_checkpoints[ds_name]
+            if not os.path.exists(ckpt_p):
+                raise FileNotFoundError(f"Checkpoint not found at {ckpt_p}")
+            m = InContextSegmentationModel(
+                in_channels=1,
+                feature_channels=[64, 64, 64],
+                num_heads=4,
+                num_layers=num_layers,
+                dropout=0.1,
+            ).to(device)
+            ckpt = torch.load(ckpt_p, map_location=device)
+            sd = ckpt["model_state_dict"]
+            adapted_sd = {}
+            for k_sd, v_sd in sd.items():
+                if k_sd.startswith("fusion.") and not k_sd.startswith("fusion.layers."):
+                    adapted_sd[k_sd.replace("fusion.", "fusion.layers.0.")] = v_sd
+                else:
+                    adapted_sd[k_sd] = v_sd
+            m.load_state_dict(adapted_sd)
+            m.eval()
+            models[ds_name] = m
+    else:
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
+        m = InContextSegmentationModel(
+            in_channels=1,
+            feature_channels=[64, 64, 64],
+            num_heads=4,
+            num_layers=3,
+            dropout=0.1,
+        ).to(device)
+        ckpt = torch.load(checkpoint_path, map_location=device)
+        m.load_state_dict(ckpt["model_state_dict"])
+        m.eval()
+        for ds_name in eval_datasets:
+            models[ds_name] = m
 
     # results structure: {dataset: {shot: dice}}
     results = {ds: {} for ds in eval_datasets}
@@ -93,7 +130,8 @@ def run_shot_ablation(
                 _, _, test_ds, _ = get_braintumour_splits(num_support=k, target_size=(128, 128), channel_idx=0)
 
             loader = DataLoader(test_ds, batch_size=8, shuffle=False, num_workers=0)
-            _, dice = evaluate_dataset_split(model, loader, criterion, device, max_steps=max_steps)
+            model = models[ds_name]
+            _, dice = evaluate_dataset_split(model, loader, criterion, device, max_steps=eval_max_steps)
             results[ds_name][k] = dice
             dices_at_k.append(dice)
             print(f"  [{ds_name.upper():12s}] K={k:2d} -> Test Dice: {dice:.4f}")
@@ -124,7 +162,11 @@ def run_shot_ablation(
     with open(output_txt, "w") as f:
         f.write("Few-Shot Support Context Ablation Results\n")
         f.write("==================================================\n")
-        f.write(f"Checkpoint: {checkpoint_path}\n\n")
+        f.write(f"Mode: {mode}\n")
+        if mode == "in_domain":
+            f.write("Checkpoints: Per-Dataset In-Domain Adapters (Spleen, Liver, Heart, BrainTumour)\n\n")
+        else:
+            f.write(f"Checkpoint: {checkpoint_path}\n\n")
         f.write(header + "\n")
         f.write(sep + "\n")
         for ds_name in eval_datasets:
@@ -135,33 +177,43 @@ def run_shot_ablation(
     print(f"\nSaved text results to {output_txt}")
 
     # Plot curve
-    plt.figure(figsize=(8, 5))
+    plt.figure(figsize=(8.5, 5.5))
     markers = ["o", "s", "^", "D"]
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
     for i, ds_name in enumerate(eval_datasets):
         vals = [results[ds_name][k] for k in shot_counts]
-        plt.plot(shot_counts, vals, marker=markers[i % len(markers)], label=ds_name.capitalize(), linewidth=1.5)
+        plt.plot(shot_counts, vals, marker=markers[i % len(markers)], color=colors[i % len(colors)],
+                 label=f"{ds_name.capitalize()}", linewidth=2.0, markersize=8)
 
     avg_vals = [avg_per_shot[k] for k in shot_counts]
-    plt.plot(shot_counts, avg_vals, "k--o", linewidth=2.5, label="Average")
+    plt.plot(shot_counts, avg_vals, "k--o", linewidth=3.0, markersize=10, label="Average (All Organs)")
 
-    plt.xlabel("Number of Support Slices (K)", fontsize=12)
-    plt.ylabel("Test Dice Score", fontsize=12)
-    plt.title("Few-Shot In-Context Segmentation Scaling Curve", fontsize=14, fontweight="bold")
-    plt.xticks(shot_counts)
-    plt.grid(True, linestyle="--", alpha=0.6)
-    plt.legend(fontsize=10)
+    plt.xlabel("Number of Support Slices (K-Shot Prompt)", fontsize=13, fontweight="bold")
+    plt.ylabel("Test Dice Similarity Coefficient", fontsize=13, fontweight="bold")
+    plt.title("Few-Shot Support Context Cardinality Scaling (K in {1, 2, 4, 8})", fontsize=14, fontweight="bold", pad=12)
+    plt.xticks(shot_counts, [f"K={k}" for k in shot_counts], fontsize=11)
+    plt.yticks(fontsize=11)
+    plt.ylim([0.45, 1.0])
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend(fontsize=11, frameon=True, facecolor="white", edgecolor="lightgray", loc="lower right")
     plt.tight_layout()
 
     os.makedirs(os.path.dirname(output_png), exist_ok=True)
-    plt.savefig(output_png, dpi=200)
+    plt.savefig(output_png, dpi=300)
+    # Also save directly into paper/figures/
+    paper_fig_path = "paper/figures/shot_ablation_curve.png"
+    os.makedirs(os.path.dirname(paper_fig_path), exist_ok=True)
+    plt.savefig(paper_fig_path, dpi=300)
     plt.close()
-    print(f"Saved scaling curve plot to {output_png}")
+    print(f"Saved scaling curve plot to {output_png} and {paper_fig_path}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate In-Context Segmentation across Support Shot Counts")
     parser.add_argument("--checkpoint", type=str, default="models/checkpoints/best_fusion_episodic.pt")
+    parser.add_argument("--mode", type=str, default="in_domain", choices=["in_domain", "single_checkpoint"], help="Evaluation mode")
     parser.add_argument("--shots", nargs="+", type=int, default=[1, 2, 4, 8], help="Support shot counts")
+    parser.add_argument("--max_steps", type=int, default=6, help="Maximum evaluation steps per dataset")
     parser.add_argument("--dry_run", action="store_true", help="Quick dry run verification")
     parser.add_argument("--output_txt", type=str, default="logs/shot_ablation_results.txt")
     parser.add_argument("--output_png", type=str, default="logs/shot_ablation_curve.png")
@@ -175,6 +227,8 @@ def main():
         device=device,
         output_txt=args.output_txt,
         output_png=args.output_png,
+        mode=args.mode,
+        max_steps=args.max_steps,
     )
 
 

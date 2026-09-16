@@ -1,0 +1,107 @@
+================================================================================
+          CAPSTONE-MEDSEG: GPU EXECUTION CHEATSHEET & STEP-BY-STEP GUIDE
+================================================================================
+
+WHEN YOU ARRIVE AT THE WINDOWS GPU PC:
+--------------------------------------------------------------------------------
+1. Open PowerShell (or Command Prompt) in your project directory:
+   cd C:\Users\<YourUsername>\Desktop\capstone-medseg  (or wherever your folder is)
+
+2. Pull the latest code and updates from GitHub first:
+   git pull origin main
+
+================================================================================
+STEP 1: CHECK THE RUNNING 40-EPOCH TRAINING JOB
+================================================================================
+
+A) Check if GPU is actively in use:
+   nvidia-smi
+
+B) Check the latest progress in the training log:
+   [In PowerShell]:
+   Get-Content logs\episodic_training.txt -Tail 25
+
+   [In CMD]:
+   type logs\episodic_training.txt
+
+C) Check if the job already finished and produced the final zero-shot results:
+   [In PowerShell]:
+   Get-Content logs\episodic_zeroshot_results.txt
+
+   [In CMD]:
+   type logs\episodic_zeroshot_results.txt
+
+
+================================================================================
+SCENARIO A: IT IS STILL RUNNING (e.g. Epoch 32/40)
+================================================================================
+- Do not stop it. Let it reach Epoch 40/40 and write out logs/episodic_zeroshot_results.txt.
+- To watch live output as it trains:
+  [In PowerShell]:
+  Get-Content logs\episodic_training.txt -Wait -Tail 15
+
+
+================================================================================
+SCENARIO B: IT FINISHED SUCCESSFULLY (40/40 epochs done)
+================================================================================
+Once it has completed, commit and push the results back to GitHub:
+
+   git add logs/ models/checkpoints/best_fusion_episodic.pt
+   git commit -m "completed 40-epoch balanced episodic training"
+   git push origin main
+
+
+================================================================================
+SCENARIO C: IF IT STOPPED EARLY OR CRASHED (e.g. power/terminal closed)
+================================================================================
+If for any reason it stopped before Epoch 40, resume seamlessly from where it left off:
+
+   python -u src\train_episodic.py --epochs 40 --episodes_per_epoch 500 --lr 5e-4 --resume
+
+
+================================================================================
+STEP 2: RUN THE NEXT GPU EXPERIMENT — LODO (LEAVE-ONE-DATASET-OUT MATRIX)
+================================================================================
+This trains 4 models holding out one organ at a time to complete Table 4:
+
+   python run_gpu_experiments.py --only_lodo
+
+Expected runtime: ~45 to 60 mins on modern GPU (4 models x 30 epochs).
+Output logs will be written to:
+   logs\episodic_lodo_spleen.txt
+   logs\episodic_lodo_liver.txt
+   logs\episodic_lodo_heart.txt
+   logs\episodic_lodo_braintumour.txt
+
+Once LODO finishes, push the results to GitHub:
+   git add logs\episodic_lodo_*.txt models\checkpoints\best_fusion_episodic_heldout_*.pt
+   git commit -m "completed LODO leave-one-out experiments"
+   git push origin main
+
+
+================================================================================
+STEP 3: RUN MULTI-SEED RUNS (SEEDS 123 & 456)
+================================================================================
+This provides the multi-seed standard deviations and confidence intervals:
+
+[Seed 123]:
+   python -u src\train_episodic.py --epochs 30 --episodes_per_epoch 500 --lr 5e-4 --num_layers 3 --seed 123 --checkpoint models\checkpoints\best_fusion_episodic_seed123.pt --results_file logs\episodic_zeroshot_results_seed123.txt
+
+[Seed 456]:
+   python -u src\train_episodic.py --epochs 30 --episodes_per_epoch 500 --lr 5e-4 --num_layers 3 --seed 456 --checkpoint models\checkpoints\best_fusion_episodic_seed456.pt --results_file logs\episodic_zeroshot_results_seed456.txt
+
+Once multi-seed runs finish, push to GitHub:
+   git add logs\episodic_zeroshot_results_seed*.txt models\checkpoints\best_fusion_episodic_seed*.pt
+   git commit -m "completed multi-seed runs 123 and 456"
+   git push origin main
+
+
+================================================================================
+STEP 4: FINAL CHECK BEFORE LEAVING THE LAB
+================================================================================
+Run git status to make sure all logs are committed and pushed:
+   git status
+   git push origin main
+
+Everything will then be live on GitHub and ready to pull on your Mac!
+================================================================================

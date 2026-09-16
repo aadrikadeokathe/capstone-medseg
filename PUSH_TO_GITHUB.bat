@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 echo ===================================================
 echo   PUSHING ALL EXPERIMENT RESULTS AND CHECKPOINTS
 echo ===================================================

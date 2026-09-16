@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 echo ========================================================
 echo   CAPSTONE-MEDSEG: MASTER OVERNIGHT GPU RUNNER
 echo   (Launch before leaving lab - runs all experiments and pushes to Git!)

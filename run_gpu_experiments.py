@@ -66,16 +66,16 @@ def main():
         run_command(
             [
                 py_exe, "-u", "src/train_episodic.py",
-                "--epochs", "30" if not args.dry_run else "2",
+                "--epochs", "40" if not args.dry_run else "2",
                 "--episodes_per_epoch", "500" if not args.dry_run else "50",
                 "--num_layers", "3",
-                "--lr", "1e-3",
+                "--lr", "5e-4",
                 "--num_support", "2",
                 "--seed", "42",
                 "--checkpoint", "models/checkpoints/best_fusion_episodic.pt",
                 "--results_file", "logs/episodic_zeroshot_results.txt"
             ] + dry_flag,
-            "EXPERIMENT 1: Joint Episodic Meta-Learning Training (All 4 Organs)"
+            "EXPERIMENT 1: Joint Episodic Meta-Learning Training (All 4 Organs - 40 Epochs)"
         )
 
     # 2. Leave-One-Dataset-Out (LODO) Matrix
@@ -92,10 +92,10 @@ def main():
                     py_exe, "-u", "src/train_episodic.py",
                     "--train_datasets", *train_ds,
                     "--test_dataset", heldout,
-                    "--epochs", "25" if not args.dry_run else "2",
+                    "--epochs", "30" if not args.dry_run else "2",
                     "--episodes_per_epoch", "400" if not args.dry_run else "50",
                     "--num_layers", "3",
-                    "--lr", "1e-3",
+                    "--lr", "5e-4",
                     "--num_support", "2",
                     "--checkpoint", f"models/checkpoints/best_fusion_episodic_heldout_{heldout}.pt",
                     "--results_file", f"logs/episodic_lodo_{heldout}.txt"

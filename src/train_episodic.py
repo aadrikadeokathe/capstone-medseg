@@ -153,22 +153,41 @@ class EpisodicMedSegDataset(Dataset):
     def __len__(self) -> int:
         return self.total_train_slices
 
-    def sample_episode(self, split: str = "train"):
+    def sample_episode(self, split: str = "train", dataset_name: str = None):
         """
         Samples a single episodic meta-learning task:
-          1. Uniformly samples one dataset (organ).
+          1. Samples one dataset (or uses provided dataset_name).
           2. From that dataset's split, randomly samples 1 query slice.
-          3. Randomly samples num_support distinct slices as support context.
+          3. Samples num_support distinct slices with guaranteed foreground as support context.
           4. Returns (query_img, query_mask, support_imgs, support_masks, dataset_name).
         """
-        ds_name = self.rng.choice(self.dataset_names)
+        ds_name = dataset_name if dataset_name is not None else self.rng.choice(self.dataset_names)
         split_ds: InContextDataset = self.splits[ds_name][split]
         total_slices = len(split_ds)
 
         query_idx = int(self.rng.choice(total_slices))
         available_support = [i for i in range(total_slices) if i != query_idx]
 
-        if len(available_support) < self.num_support:
+        # Prioritize high-quality support slices with clear foreground (>50 non-zero mask pixels)
+        good_support = []
+        if len(available_support) > self.num_support:
+            candidates = list(
+                self.rng.choice(
+                    available_support,
+                    size=min(len(available_support), 25),
+                    replace=False
+                )
+            )
+            for cand in candidates:
+                _, cand_mask = split_ds._get_slice(cand)
+                if np.count_nonzero(cand_mask) >= 50:
+                    good_support.append(cand)
+                    if len(good_support) >= self.num_support:
+                        break
+
+        if len(good_support) >= self.num_support:
+            support_indices = good_support[:self.num_support]
+        elif len(available_support) < self.num_support:
             support_indices = available_support
         else:
             support_indices = list(
@@ -285,10 +304,10 @@ def load_baseline_scores(dataset: str):
 
 
 def train_episodic(
-    num_epochs: int = 30,
+    num_epochs: int = 40,
     episodes_per_epoch: int = 500,
     num_layers: int = 3,
-    lr: float = 1e-3,
+    lr: float = 5e-4,
     num_support: int = 2,
     seed: int = 42,
     dry_run: bool = False,
@@ -296,6 +315,7 @@ def train_episodic(
     train_datasets: list = None,
     checkpoint_path: str = "models/checkpoints/best_fusion_episodic.pt",
     log_file_path: str = "logs/episodic_training.txt",
+    resume: bool = False,
 ):
     """
     Trains the In-Context Segmentation Model via Episodic Meta-Learning.
@@ -323,6 +343,7 @@ def train_episodic(
     print(f" Seed:                {seed}")
     print(f" Training Datasets:   {train_datasets or SUPPORTED_DATASETS}")
     print(f" Checkpoint Target:   {checkpoint_path}")
+    print(f" Resume from Ckpt:    {resume}")
     print(f" Dry Run Mode:        {dry_run}")
     print("--------------------------------------------------")
 
@@ -348,13 +369,24 @@ def train_episodic(
 
     # Trainable parameters: FusionModule + Decoder only
     trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=1e-4, eps=1e-8)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-5)
     criterion = BCEDiceLoss(bce_weight=0.5)
 
     os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
     os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
     best_avg_val_dice = -1.0
+    start_epoch = 1
+
+    if resume and os.path.exists(checkpoint_path):
+        ckpt = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        if "best_avg_val_dice" in ckpt:
+            best_avg_val_dice = ckpt["best_avg_val_dice"]
+        if "epoch" in ckpt:
+            start_epoch = ckpt["epoch"] + 1
+        print(f"[INFO] Resumed weights from {checkpoint_path} (previous best avg val Dice: {best_avg_val_dice:.4f}, start epoch: {start_epoch})")
     history = {
         "train_loss": [],
         "train_dice": [],
@@ -383,7 +415,10 @@ def train_episodic(
         header = "Epoch,TrainLoss,TrainDice," + ",".join([f"ValDice_{d}" for d in dataset.dataset_names]) + ",AvgValDice\n"
         log_f.write(header)
 
-    for epoch in range(1, num_epochs + 1):
+    num_train_ds = len(dataset.dataset_names)
+    steps_per_epoch = max(1, episodes_per_epoch // num_train_ds)
+
+    for epoch in range(start_epoch, num_epochs + 1):
         model.train()
         running_train_loss = 0.0
         running_train_dice = 0.0
@@ -391,32 +426,48 @@ def train_episodic(
 
         epoch_start_time = time.time()
 
-        for ep_idx in range(episodes_per_epoch):
-            q_img, q_mask, s_imgs, s_masks, organ = dataset.sample_episode(split="train")
-            organ_counts[organ] += 1
-
-            # Shape: [1, C, H, W] and [1, S, C, H, W]
-            q_img = q_img.unsqueeze(0).to(device)
-            q_mask = q_mask.unsqueeze(0).to(device)
-            s_imgs = s_imgs.unsqueeze(0).to(device)
-            s_masks = s_masks.unsqueeze(0).to(device)
-
+        for step in range(steps_per_epoch):
             optimizer.zero_grad()
-            logits = model(q_img, s_imgs, s_masks)
-            loss = criterion(logits, q_mask)
-            loss.backward()
+            step_loss = 0.0
+            step_dice = 0.0
+
+            # Balanced task gradient accumulation: sample one episode from each active organ
+            for organ in dataset.dataset_names:
+                q_img, q_mask, s_imgs, s_masks, _ = dataset.sample_episode(split="train", dataset_name=organ)
+                organ_counts[organ] += 1
+
+                # Shape: [1, C, H, W] and [1, S, C, H, W]
+                q_img = q_img.unsqueeze(0).to(device)
+                q_mask = q_mask.unsqueeze(0).to(device)
+                s_imgs = s_imgs.unsqueeze(0).to(device)
+                s_masks = s_masks.unsqueeze(0).to(device)
+
+                logits = model(q_img, s_imgs, s_masks)
+                loss = criterion(logits, q_mask)
+
+                # Accumulate normalized gradient across organs
+                scaled_loss = loss / num_train_ds
+                scaled_loss.backward()
+
+                with torch.no_grad():
+                    probs = torch.sigmoid(logits)
+                    preds = (probs > 0.5).float()
+                    dice = compute_dice_score(preds, q_mask)
+
+                step_loss += loss.item()
+                step_dice += dice
+
+            # Clip gradients to prevent instability across heterogeneous modalities
+            torch.nn.utils.clip_grad_norm_(trainable_params, max_norm=1.0)
             optimizer.step()
 
-            with torch.no_grad():
-                probs = torch.sigmoid(logits)
-                preds = (probs > 0.5).float()
-                dice = compute_dice_score(preds, q_mask)
+            running_train_loss += step_loss / num_train_ds
+            running_train_dice += step_dice / num_train_ds
 
-            running_train_loss += loss.item()
-            running_train_dice += dice
+        scheduler.step()
 
-        epoch_train_loss = running_train_loss / episodes_per_epoch
-        epoch_train_dice = running_train_dice / episodes_per_epoch
+        epoch_train_loss = running_train_loss / steps_per_epoch
+        epoch_train_dice = running_train_dice / steps_per_epoch
         history["train_loss"].append(epoch_train_loss)
         history["train_dice"].append(epoch_train_dice)
 
@@ -450,9 +501,10 @@ def train_episodic(
 
         epoch_time = time.time() - epoch_start_time
         val_str = " | ".join([f"{d[:4].capitalize()}: {val_dices[d]:.4f}" for d in dataset.dataset_names])
+        curr_lr = scheduler.get_last_lr()[0]
 
         print(
-            f"Epoch [{epoch:02d}/{num_epochs:02d}] ({epoch_time:4.1f}s) "
+            f"Epoch [{epoch:02d}/{num_epochs:02d}] ({epoch_time:4.1f}s, lr={curr_lr:.1e}) "
             f"Loss: {epoch_train_loss:.4f} | Train Dice: {epoch_train_dice:.4f} || "
             f"{val_str} | AvgVal: {avg_val_dice:.4f}"
             f"{' [SAVED BEST]' if is_best else ''}"
@@ -646,12 +698,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Episodic Meta-Learning Training & Zero-Shot Evaluation for In-Context Segmentation"
     )
-    parser.add_argument("--epochs", type=int, default=30, help="Number of epochs")
+    parser.add_argument("--epochs", type=int, default=40, help="Number of epochs")
     parser.add_argument("--episodes_per_epoch", type=int, default=500, help="Episodes sampled per epoch")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of feature stages/layers")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
     parser.add_argument("--num_support", type=int, default=2, help="Support slices per episode")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--resume", action="store_true", help="Resume from existing checkpoint if available")
     parser.add_argument("--dry_run", action="store_true", help="Quick dry run (2 epochs, 50 episodes)")
     parser.add_argument("--eval_only", action="store_true", help="Skip training and run zero-shot evaluation only")
     parser.add_argument("--checkpoint", type=str, default="models/checkpoints/best_fusion_episodic.pt")
@@ -683,6 +736,7 @@ def main():
             train_datasets=train_ds,
             checkpoint_path=args.checkpoint,
             log_file_path=f"logs/episodic_training_{args.test_dataset}.txt" if args.test_dataset else "logs/episodic_training.txt",
+            resume=args.resume,
         )
         evaluate_zeroshot_episodic(
             checkpoint_path=ckpt_path,

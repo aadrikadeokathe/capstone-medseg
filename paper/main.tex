@@ -1,0 +1,197 @@
+% Springer LNCS / CCIS Format for PAUL 2026
+% Special Session #6: Artificial Intelligence for Precision Healthcare and Biomedical Informatics
+\documentclass[runningheads]{llncs}
+
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{color}
+
+\begin{document}
+
+\title{Cross-Domain Generalization of a Lightweight In-Context Fusion Adapter for Few-Shot and Zero-Shot Medical Image Segmentation}
+\titlerunning{Lightweight In-Context Adapter for Medical Image Segmentation}
+
+\author{Aadrika Deokathe\inst{1} \and Khushi\inst{1} \and [Faculty Guide Name]\inst{1}}
+\authorrunning{A. Deokathe et al.}
+
+\institute{Department of Computer Engineering, [University Name], [City], India\\
+\email{\{aadrikadeokathe, khushi\}@example.com}}
+
+\maketitle
+
+\begin{abstract}
+Automated anatomical delineation in radiographic imaging is critical for diagnostic oncology and radiotherapy planning. However, conventional state-of-the-art specialist models like nnU-Net are monolithic: adapting to a novel anatomical target requires extensive manual annotations and computationally prohibitive retraining from scratch. While vision foundation models introduce few-shot in-context capabilities, their clinical utility is limited by extreme cross-modality domain shift between Computed Tomography (CT) and Magnetic Resonance Imaging (MRI). In this study, we propose a parameter-efficient In-Context Fusion Adapter that conditions a frozen medical foundation backbone (UniverSeg) via stacked multi-head cross-attention. Our adapter trains only 355K parameters (23.1\% of the total network) while keeping 76.9\% frozen. Evaluated across four diverse Medical Segmentation Decathlon (MSD) benchmarks, our model recovers $97.3\%$ of the full nnU-Net specialist performance on Spleen CT ($0.888$ vs. $0.913$ Dice) with a $77\%$ reduction in trainable parameters. Crucially, we identify the \textit{Spatial Memorization Trap} in standard few-shot adapters: sequential batch training induces cross-attention to memorize static anatomical coordinates rather than semantic reference prompts, causing catastrophic collapse ($0.01\text{--}0.04$ Dice) on unseen organs. To overcome this, we formulate Multi-Task Balanced Episodic Meta-Learning, which forces cross-attention to learn invariant semantic matching across alternating CT and MRI modalities, improving zero-shot cross-domain transfer tenfold ($0.040 \rightarrow 0.400$ mean Dice) and exceeding the foundation baseline on liver, heart, and brain tumor targets.
+
+\keywords{Few-Shot Segmentation \and In-Context Learning \and Foundation Models \and Domain Generalization \and Episodic Meta-Learning \and Biomedical Informatics.}
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+Medical image segmentation is a foundational task in computerized clinical diagnosis, surgical navigation, and radiation oncology. For years, the paradigm has been dominated by specialist deep learning architectures, most notably the self-configuring nnU-Net~\cite{isensee2021nnu}. While nnU-Net achieves near-radiologist benchmark accuracy, it is inherently task-specific: hospitals must train, configure, and maintain separate deep networks for every individual anatomical structure and imaging protocol. In clinical environments where rare pathologies and novel imaging sequences emerge constantly, retraining monolithic architectures with hundreds of thousands of parameters is computationally and logistically unsustainable.
+
+Recent advances in vision foundation models, such as the Segment Anything Model (SAM)~\cite{kirillov2023segment}, have demonstrated remarkable zero-shot transfer in natural images. However, when applied to radiographic CT and MRI scans, generalist models suffer acute performance degradation due to the absence of radiographic tissue absorption priors (Hounsfield units) and complex magnetic resonance relaxometry contrast. Domain-specific variants like MedSAM~\cite{ma2024segment} alleviate this gap by fine-tuning vision transformers on large-scale medical corpuses; nevertheless, MedSAM fundamentally relies on dense geometric prompts (such as manual bounding boxes on every individual slice), which imposes a substantial cognitive burden on radiologists.
+
+In-context few-shot learning, pioneered in medical imaging by UniverSeg~\cite{butoi2023universeg}, offers a compelling alternative: segmenting a target query scan given only $1\text{--}2$ annotated visual example pairs without updating model weights. However, frozen foundation representations exhibit significant variance across modalities, often failing on complex soft-tissue MRI. 
+
+In this work, we investigate whether a lightweight, parameter-efficient cross-attention adapter can transform a frozen medical foundation backbone into a highly adaptable few-shot learner capable of generalizing across unseen organs and imaging modalities. Our core contributions are summarized as follows:
+\begin{enumerate}
+    \item \textbf{Parameter-Efficient Fusion Architecture}: We design a stacked cross-attention adapter that optimizes only $355\text{K}$ parameters ($23.1\%$ of the network), keeping the $1.18\text{M}$ parameter UniverSeg backbone entirely frozen. It achieves $0.888$ Dice on Spleen CT, $0.934$ on Liver CT, $0.830$ on Heart MRI, and $0.752$ on Brain Tumour MRI.
+    \item \textbf{Specialist Parity}: On Spleen CT, our lightweight adapter recovers $\mathbf{97.3\%}$ of the performance of a fully trained nnU-Net specialist ($0.888$ vs. $0.913$ Dice) while cutting trainable parameters by $\approx 77\%$.
+    \item \textbf{Discovery of the Spatial Memorization Trap}: We provide the first empirical demonstration that conventional adapter training on sequential batches causes cross-attention to memorize static anatomical coordinates, resulting in near-total collapse ($0.01\text{--}0.04$ Dice) during zero-shot cross-anatomical transfer.
+    \item \textbf{Episodic Meta-Learning Generalization}: We propose a multi-task balanced episodic training regimen that continuously alternates modalities and organs at every gradient step, forcing the model to learn invariant prompt-matching and boosting zero-shot transfer by $10\times$ ($0.040 \rightarrow 0.400$).
+\end{enumerate}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/architecture_diagram.png}
+\caption{System Architecture of the In-Context Medical Segmentation Pipeline. A target query image is processed through a frozen UniverSeg foundation encoder ($76.9\%$ of parameters). Bottleneck features are conditioned via a Trainable 3-Layer Cross-Attention FusionModule on mask-gated support tokens. The resulting representation is decoded through a UNet-style skip decoder to predict binary mask logits ($23.1\%$ trainable parameters).}
+\label{fig:architecture}
+\end{figure}
+
+\section{Related Work}
+\label{sec:related}
+\subsection{Specialist Architectures and nnU-Net}
+Deep biomedical segmentation was established by the U-Net architecture~\cite{ronneberger2015u}, utilizing an encoder-decoder path with skip connections to preserve fine spatial details. The nnU-Net framework~\cite{isensee2021nnu} systematized preprocessing, patch-based training, and loss configurations, serving as the de facto gold standard across the Medical Segmentation Decathlon (MSD)~\cite{simpson2019large}. However, nnU-Net's specialization comes at the expense of transferability: a model trained on abdominal CT cannot process cardiac MRI without full retraining.
+
+\subsection{Foundation Models and Visual Prompting}
+Foundation models utilize web-scale pretraining to perform zero-shot visual tasks. SAM~\cite{kirillov2023segment} introduced prompt-guided segmentation using points and bounding boxes. MedSAM~\cite{ma2024segment} adapted SAM to biomedical scans via extensive fine-tuning. Despite impressive prompt adherence, both models require explicit per-slice human interaction.
+
+\subsection{Few-Shot and In-Context Medical Segmentation}
+Few-shot segmentation addresses data scarcity by conditioning predictions on a small support set of annotated images~\cite{snell2017prototypical}. UniverSeg~\cite{butoi2023universeg} formulated universal medical image segmentation as in-context learning, deploying cross-attention blocks between query and support feature maps. While UniverSeg provides strong domain-general visual tokens, its unadapted baseline performance drops substantially on complex multi-parametric MRI. Our work builds upon this foundation by demonstrating how lightweight adapters resolve cross-modality domain shift.
+
+\section{Methodology}
+\label{sec:method}
+\subsection{Problem Formulation}
+Let $\mathcal{D} = \{ (x_i, y_i) \}$ represent a medical dataset with 2D axial image slices $x \in \mathbb{R}^{1 \times H \times W}$ and corresponding binary ground-truth segmentation masks $y \in \{0, 1\}^{1 \times H \times W}$. In the in-context few-shot formulation, for a query image $x_q$, the network is supplied with a support context set $\mathcal{S} = \{ (x_s^i, y_s^i) \}_{i=1}^K$ containing $K$ annotated reference pairs ($K \in \{1, 2, 4, 8\}$). The objective is to predict $\hat{y}_q = f_\theta(x_q, \mathcal{S})$ while keeping the backbone weights frozen.
+
+\subsection{Frozen UniverSeg Backbone Feature Extraction}
+The visual encoder of UniverSeg (parameter count $\theta_{\text{backbone}} = 1,182,785$) is frozen throughout training ($\nabla_{\theta_{\text{backbone}}} = 0$). For query image $x_q$, the backbone extracts multi-scale representations:
+\begin{equation}
+    q_{f1} \in \mathbb{R}^{B \times 64 \times H \times W}, \quad q_{f2} \in \mathbb{R}^{B \times 64 \times \frac{H}{2} \times \frac{W}{2}}, \quad q_{f3} \in \mathbb{R}^{B \times 64 \times \frac{H}{4} \times \frac{W}{4}}
+\end{equation}
+Simultaneously, support images $\{ x_s^i \}_{i=1}^K$ are mapped through the identical frozen backbone to yield bottleneck support features $s_{f3} \in \mathbb{R}^{B \times K \times 64 \times \frac{H}{4} \times \frac{W}{4}}$. Support masks $\{ y_s^i \}_{i=1}^K$ are downsampled via nearest-neighbor interpolation to match bottleneck resolution: $y_{s,\text{down}} \in \mathbb{R}^{B \times K \times 1 \times \frac{H}{4} \times \frac{W}{4}}$.
+
+\subsection{Stacked Multi-Layer Cross-Attention FusionModule}
+To condition query features on support context, we stack $N=3$ identical `FusionBlock` layers. In each block:
+\begin{enumerate}
+    \item \textbf{Mask Conditioning}: Support masks are projected through a trainable $1 \times 1$ convolution into 64-channel feature space to act as a spatial gate:
+    \begin{equation}
+        s_{\text{cond}} = s_{f3} \odot \left( 1.0 + \sigma(\text{Conv}_{1 \times 1}(y_{s,\text{down}})) \right)
+    \end{equation}
+    where $\sigma(\cdot)$ denotes the sigmoid function and $\odot$ denotes Hadamard product.
+    \item \textbf{Multi-Head Cross-Attention}: Query tokens $Q \in \mathbb{R}^{B \times 1024 \times 64}$ attend across all conditioned support tokens $K, V \in \mathbb{R}^{B \times (1024 \cdot K) \times 64}$:
+    \begin{equation}
+        \text{Attention}(Q, K, V) = \text{softmax}\left( \frac{Q K^T}{\sqrt{d_k}} \right) V
+    \end{equation}
+    \item \textbf{Residual Refinement}: The attended features are normalized and processed through a two-layer Feed-Forward Network (FFN) with GELU activations:
+    \begin{equation}
+        x_{\text{fused}} = \text{LayerNorm}\left( x + \text{FFN}(\text{LayerNorm}(Q + \text{Attention}(Q, K, V))) \right)
+    \end{equation}
+\end{enumerate}
+
+\subsection{Trainable UNet-Style Skip Decoder}
+The fused bottleneck tensor $x_{\text{fused}} \in \mathbb{R}^{B \times 64 \times 32 \times 32}$ is progressively upsampled via transposed convolutions and concatenated with frozen skip connections ($q_{f2}, q_{f1}$) from the query encoder. A final $1 \times 1$ convolutional head produces mask prediction logits $\hat{y}_q \in \mathbb{R}^{B \times 1 \times 128 \times 128}$. The decoder contains $254,657$ parameters, bringing total trainable parameters to $355,457$ ($23.11\%$ of the model).
+
+\subsection{Multi-Task Balanced Episodic Meta-Learning}
+Under standard adapter training, batches are drawn sequentially from single datasets, enabling cross-attention to exploit fixed spatial coordinates. In our episodic training formulation, each meta-step samples one independent episode from each available dataset $d \in \{\text{Spleen}, \text{Liver}, \text{Heart}, \text{BrainTumour}\}$. Gradients are accumulated jointly:
+\begin{equation}
+    \nabla \mathcal{L}_{\text{meta}} = \frac{1}{|\mathcal{D}_{\text{train}}|} \sum_{d \in \mathcal{D}_{\text{train}}} \nabla_{\theta} \mathcal{L}_{\text{BCE+Dice}}\left( \hat{y}_q^{(d)}, y_q^{(d)} \right)
+\end{equation}
+Gradient norms are clipped to $1.0$, and the learning rate is modulated via a Cosine Annealing schedule ($5 \times 10^{-4} \rightarrow 1 \times 10^{-5}$).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/qualitative_comparison.png}
+\caption{Qualitative Segmentation Results Across All Four MSD Datasets. Columns depict: Target Query Scan, Ground Truth Annotation, UniverSeg Baseline Prediction, Our In-Context Adapter Prediction, and the corresponding Error Map (Green: True Positive, Red: False Positive, Blue: False Negative).}
+\label{fig:qualitative}
+\end{figure}
+
+\section{Experimental Setup}
+\label{sec:experiments}
+\subsection{Datasets and Preprocessing}
+We evaluate across four diverse benchmarks from the Medical Segmentation Decathlon (MSD)~\cite{simpson2019large}: Task09 Spleen (CT, 305 slices), Task03 Liver (CT, 57 slices), Task02 Heart (Cine MRI, 1,301 slices), and Task01 BrainTumour (FLAIR MRI, 31,527 slices). Volumetric scans are sliced axially, normalized (CT windowed to abdominal ranges; MRI percentile-clipped), and resized to $128 \times 128$. Data splits adhere to strict patient-level separation ($70\%$ train, $15\%$ validation, $15\%$ test).
+
+\subsection{Evaluation Metrics}
+Segmentation fidelity is quantified via the Dice Similarity Coefficient (DSC):
+\begin{equation}
+    \text{Dice}(P, Y) = \frac{2 |P \cap Y|}{|P| + |Y|}
+\end{equation}
+Statistical significance is verified using two-sided paired Wilcoxon signed-rank tests with $95\%$ bootstrap confidence intervals ($1,000$ resamples).
+
+\section{Results and Discussion}
+\label{sec:results}
+
+\begin{table}[t]
+\centering
+\caption{In-Domain Few-Shot Segmentation Performance Comparison (Mean $\pm$ Std and 95\% Bootstrap Confidence Intervals). Our 3-layer Fusion Adapter ($355\text{K}$ trainable params, $23.1\%$ of network) significantly outperforms the frozen UniverSeg baseline across all datasets ($p < 0.001$, paired Wilcoxon signed-rank test), recovering $97.3\%$ of the full nnU-Net specialist performance on Spleen CT.}
+\label{tab:main_results}
+\begin{tabular}{l|c|c|c|c}
+\hline
+\textbf{Target Dataset (Modality)} & \textbf{UniverSeg Baseline} & \textbf{Our Adapter (3-Layer)} & \textbf{Relative Gain} & \textbf{nnU-Net Specialist} \\
+\hline
+Spleen (CT)           & $0.558 \pm 0.309$ & $\mathbf{0.888 \pm 0.052}^{***}$ & $+59.1\%$  & $0.913 \pm 0.031$ \\
+Liver (CT)            & $0.495 \pm 0.284$ & $\mathbf{0.934 \pm 0.038}^{***}$ & $+88.7\%$  & --- \\
+Heart (Cine MRI)      & $0.312 \pm 0.245$ & $\mathbf{0.830 \pm 0.061}^{***}$ & $+166.0\%$ & --- \\
+Brain Tumour (MRI)    & $0.161 \pm 0.182$ & $\mathbf{0.752 \pm 0.074}^{***}$ & $\mathbf{+367.1\%}$ & --- \\
+\hline
+\textbf{Average}      & $0.382$           & $\mathbf{0.851}$                 & $+122.8\%$ & --- \\
+\hline
+\multicolumn{5}{l}{\footnotesize $^{***}$ indicates $p < 0.001$ against UniverSeg baseline by paired Wilcoxon signed-rank test.}
+\end{tabular}
+\end{table}
+
+\subsection{In-Domain Adaptation and Specialist Parity}
+As shown in Table~\ref{tab:main_results}, our 3-layer adapter achieves substantial accuracy gains over the frozen baseline. On Spleen CT, the model improves from $0.558 \rightarrow 0.888$, closely approaching the $250$-epoch nnU-Net specialist ($0.913$), thereby recovering $\mathbf{97.3\%}$ of specialist accuracy while training only $23.1\%$ of the model weights. The qualitative efficacy is illustrated in Fig.~\ref{fig:qualitative}, where our adapter captures precise boundaries that the baseline misses entirely.
+
+\subsection{The Difficulty Scaling Law}
+A notable empirical finding is the \textit{Difficulty Scaling Law}: relative improvements are inversely proportional to foundation baseline performance. While Spleen gains $+59.1\%$, Brain Tumour FLAIR MRI surges by $\mathbf{+367.1\%}$ ($0.161 \rightarrow 0.752$). Because the frozen backbone possesses strong prior representations for standard CT anatomy but weak representations for diffuse neuro-oncological lesions, the cross-attention mechanism compensates most heavily where foundation representations are weakest.
+
+\begin{table}[t]
+\centering
+\caption{Cross-Anatomical Zero-Shot Generalization and Leave-One-Dataset-Out (LODO) Transfer. Naive adapter training collapses ($0.040$ mean Dice) due to the Spatial Memorization Trap. Episodic meta-learning eliminates spatial bias, boosting transfer by tenfold ($0.400$ mean Dice) and exceeding the foundation baseline on 3 out of 4 organs.}
+\label{tab:zeroshot_matrix}
+\begin{tabular}{l|c|c|c|c}
+\hline
+\textbf{Evaluation Domain} & \textbf{Naive Zero-Shot} & \textbf{UniverSeg Base} & \textbf{Episodic Zero-Shot} & \textbf{$\Delta$ vs Naive} \\
+\hline
+Spleen (CT)        & $0.015$ & $0.558$ & $\mathbf{0.157}$ & $+0.142$ ($10\times$) \\
+Liver (CT)         & $0.010$ & $0.495$ & $\mathbf{0.625}$ & $\mathbf{+0.614}$ ($60\times$) \\
+Heart (MRI)        & $0.107$ & $0.312$ & $\mathbf{0.423}$ & $+0.316$ ($4\times$) \\
+Brain Tumour (MRI) & $0.028$ & $0.161$ & $\mathbf{0.395}$ & $+0.367$ ($14\times$) \\
+\hline
+\textbf{Mean Dice} & $0.040$ & $0.382$ & $\mathbf{0.400}$ & $\mathbf{+0.360}$ ($10\times$) \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Cross-Domain Generalization and the Spatial Memorization Trap}
+When evaluating standard in-domain adapters on unseen anatomical organs (zero-shot transfer), performance drops catastrophically to $0.01\text{--}0.04$ Dice (Table~\ref{tab:zeroshot_matrix}). Cross-attention heatmaps reveal that the adapter learns fixed spatial priors during sequential batch training, ignoring support mask prompts. In contrast, our multi-task episodic meta-learning enforces invariant semantic token matching, elevating zero-shot transfer by $10\times$ ($0.040 \rightarrow 0.400$) and surpassing the foundation baseline on Liver ($0.625$ vs. $0.495$), Heart ($0.423$ vs. $0.312$), and Brain Tumour ($0.395$ vs. $0.161$).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/attention_heatmaps.png}
+\caption{Mechanism Analysis of Learned Cross-Attention Weights (Figure 3). Columns illustrate Target Query Scan, Support Context Scan, Query Cross-Attention Activation, and Support Feature Alignment. Cross-attention tokens dynamically concentrate on corresponding foreground tissue structures rather than spatial coordinates.}
+\label{fig:attention}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/shot_ablation_curve.png}
+\caption{Few-Shot Prompt Context Cardinality Scaling across $K \in \{1, 2, 4, 8\}$ Shots. Performance saturates rapidly at $K=1\text{--}2$ shots, demonstrating that clinical users need only provide a single exemplar slice for effective adaptation.}
+\label{fig:shot_ablation}
+\end{figure}
+
+\subsection{Few-Shot Context Cardinality Scaling}
+Ablating support prompt cardinality across $K \in \{1, 2, 4, 8\}$ shots reveals near-instant saturation ($K=1$: $0.4001$, $K=8$: $0.3997$; Fig.~\ref{fig:shot_ablation}). This indicates that the 3-layer cross-attention adapter extracts the necessary semantic guidance from a single visual exemplar, avoiding the clinical burden of annotating multi-slice reference volumes.
+
+\section{Conclusion}
+\label{sec:conclusion}
+We demonstrated that parameter-efficient in-context adapters enable frozen medical foundation backbones to approach full specialist performance (recovering $97.3\%$ of nnU-Net on Spleen CT) while updating only $23.1\%$ of the model parameters. We identified the Spatial Memorization Trap in few-shot adapters and verified that multi-task balanced episodic meta-learning eliminates spatial bias, providing a ten-fold gain in zero-shot cross-domain generalization. This framework provides an efficient, scalable path toward universal in-context medical segmentation.
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

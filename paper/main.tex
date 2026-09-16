@@ -14,11 +14,11 @@
 \title{Cross-Domain Generalization of a Lightweight In-Context Fusion Adapter for Few-Shot and Zero-Shot Medical Image Segmentation}
 \titlerunning{Lightweight In-Context Adapter for Medical Image Segmentation}
 
-\author{Aadrika Deokathe\inst{1} \and Khushi\inst{1} \and [Faculty Guide Name]\inst{1}}
+\author{Aadrika Deokathe \and Khushi Chadda \and Harsh Chhatri \and Dr. Shweta Gangrade}
 \authorrunning{A. Deokathe et al.}
 
-\institute{Department of Computer Engineering, [University Name], [City], India\\
-\email{\{aadrikadeokathe, khushi\}@example.com}}
+\institute{School of Technology Management \& Engineering, SVKM's NMIMS, Indore, Madhya Pradesh, India\\
+\email{\{aadrikadeokathe28, khushichadda2004\}@gmail.com, shweta.gangrade@nmims.edu}}
 
 \maketitle
 
@@ -185,13 +185,46 @@ When evaluating standard in-domain adapters on unseen anatomical organs (zero-sh
 \end{figure}
 
 \subsection{Few-Shot Context Cardinality Scaling}
-Ablating support prompt cardinality across $K \in \{1, 2, 4, 8\}$ shots reveals near-instant saturation ($K=1$: $0.4001$, $K=8$: $0.3997$; Fig.~\ref{fig:shot_ablation}). This indicates that the 3-layer cross-attention adapter extracts the necessary semantic guidance from a single visual exemplar, avoiding the clinical burden of annotating multi-slice reference volumes.
-
 \section{Conclusion}
 \label{sec:conclusion}
 We demonstrated that parameter-efficient in-context adapters enable frozen medical foundation backbones to approach full specialist performance (recovering $97.3\%$ of nnU-Net on Spleen CT) while updating only $23.1\%$ of the model parameters. We identified the Spatial Memorization Trap in few-shot adapters and verified that multi-task balanced episodic meta-learning eliminates spatial bias, providing a ten-fold gain in zero-shot cross-domain generalization. This framework provides an efficient, scalable path toward universal in-context medical segmentation.
 
-\bibliographystyle{splncs04}
-\bibliography{references}
+\subsubsection{Acknowledgements}
+This work was conducted at the School of Technology Management \& Engineering, SVKM's NMIMS, Indore, India. The authors gratefully acknowledge the laboratory facilities and computational resources provided for this research.
+
+%
+% ---- Bibliography ----
+%
+\begin{thebibliography}{10}
+\bibitem{isensee2021nnu}
+Isensee, F., Jaeger, P.F., Kohl, S.A., Petersen, J., Maier-Hein, K.H.: nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods \textbf{18}(2), 203--211 (2021)
+
+\bibitem{kirillov2023segment}
+Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 4015--4026 (2023)
+
+\bibitem{ma2024segment}
+Ma, J., He, Y., Li, F., Han, L., You, C., Wang, B.: Segment anything in medical images. Nature Communications \textbf{15}(1), 654 (2024)
+
+\bibitem{butoi2023universeg}
+Butoi, V.I., Ortiz, J.J.G., Ma, T., Sabuncu, M.R., Guttag, J., Dalca, A.V.: UniverSeg: Universal medical image segmentation with in-context learning. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 21458--21469 (2023)
+
+\bibitem{ronneberger2015u}
+Ronneberger, O., Fischer, P., Brox, T.: U-Net: Convolutional networks for biomedical image segmentation. In: Medical Image Computing and Computer-Assisted Intervention (MICCAI), LNCS, vol. 9351, pp. 234--241. Springer, Cham (2015)
+
+\bibitem{simpson2019large}
+Simpson, A.L., Antonelli, M., Bakas, S., Bilello, M., Farahani, K., van Ginneken, B., Henderson, A., Jackson, A., et al.: A large annotated medical image dataset for the development and evaluation of segmentation algorithms. arXiv preprint arXiv:1902.09063 (2019)
+
+\bibitem{snell2017prototypical}
+Snell, J., Swersky, K., Zemel, R.: Prototypical networks for few-shot learning. In: Advances in Neural Information Processing Systems (NeurIPS), vol. 30, pp. 4077--4087 (2017)
+
+\bibitem{hu2021lora}
+Hu, E.J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W.: LoRA: Low-rank adaptation of large language models. In: International Conference on Learning Representations (ICLR) (2022)
+
+\bibitem{vaswani2017attention}
+Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, {\L}., Polosukhin, I.: Attention is all you need. In: Advances in Neural Information Processing Systems (NeurIPS), vol. 30, pp. 5998--6008 (2017)
+
+\bibitem{finn2017model}
+Finn, C., Abbeel, P., Levine, S.: Model-agnostic meta-learning for fast adaptation of deep networks. In: International Conference on Machine Learning (ICML), pp. 1126--1135 (2017)
+\end{thebibliography}
 
 \end{document}

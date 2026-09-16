@@ -1,0 +1,41 @@
+================================================================================
+           INSTANT GPU INSTRUCTIONS & CHEATSHEET
+================================================================================
+
+OPTION 1: AUTOMATIC ONE-CLICK PUSH (EASIEST)
+--------------------------------------------------------------------------------
+Simply double-click the file:
+    PUSH_TO_GITHUB.bat
+
+(Or in PowerShell / CMD run:  .\PUSH_TO_GITHUB.bat )
+
+It will automatically:
+  1. Add logs/ (evaluation tables, plots, training curves)
+  2. Force-add models/checkpoints/*.pt (bypasses .gitignore using -f)
+  3. Commit everything
+  4. Pull remote changes with --rebase (prevents push rejections)
+  5. Push directly to origin main!
+
+
+OPTION 2: MANUAL COMMANDS (IF RUNNING STEP-BY-STEP IN POWERSHELL)
+--------------------------------------------------------------------------------
+git add logs/
+git add -f models/checkpoints/*.pt
+git commit -m "completed 30-epoch and 40-epoch results"
+git pull origin main --rebase
+git push origin main
+
+
+OPTION 3: QUICK VIEW - SEE YOUR NUMBERS RIGHT ON SCREEN
+--------------------------------------------------------------------------------
+To print the zero-shot evaluation table:
+    Get-Content logs\episodic_zeroshot_results.txt
+
+To view the last 30 lines of the training progress:
+    Get-Content logs\episodic_training.txt -Tail 30
+
+
+OPTION 4: RUN NEXT EXPERIMENT (LODO - LEAVE-ONE-DATASET-OUT)
+--------------------------------------------------------------------------------
+    python run_gpu_experiments.py --only_lodo
+================================================================================

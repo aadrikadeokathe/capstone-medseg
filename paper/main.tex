@@ -14,7 +14,10 @@
 \title{Cross-Domain Generalization of a Lightweight In-Context Fusion Adapter for Few-Shot and Zero-Shot Medical Image Segmentation}
 \titlerunning{Lightweight In-Context Adapter for Medical Image Segmentation}
 
-\author{Aadrika Deokathe \and Khushi Chadda \and Harsh Chhatri \and Dr. Shweta Gangrade}
+\author{Aadrika Deokathe\inst{1}\thanks{Lead and principal contributor; Corresponding author: \email{aadrikadeokathe28@gmail.com}} \and 
+Khushi Chadda\inst{1} \and 
+Harsh Chhatri\inst{1} \and 
+Dr. Shweta Gangrade\inst{1}}
 \authorrunning{A. Deokathe et al.}
 
 \institute{School of Technology Management \& Engineering, SVKM's NMIMS, Indore, Madhya Pradesh, India\\
@@ -189,7 +192,13 @@ When evaluating standard in-domain adapters on unseen anatomical organs (zero-sh
 \label{sec:conclusion}
 We demonstrated that parameter-efficient in-context adapters enable frozen medical foundation backbones to approach full specialist performance (recovering $97.3\%$ of nnU-Net on Spleen CT) while updating only $23.1\%$ of the model parameters. We identified the Spatial Memorization Trap in few-shot adapters and verified that multi-task balanced episodic meta-learning eliminates spatial bias, providing a ten-fold gain in zero-shot cross-domain generalization. This framework provides an efficient, scalable path toward universal in-context medical segmentation.
 
-\subsubsection{Acknowledgements}
+\subsubsection*{Author Contributions}
+\textbf{Aadrika Deokathe} (Lead and Principal Contributor): Conceived the research idea, formulated the theoretical framework, designed the cross-attention fusion adapter architecture, developed the multi-task balanced episodic meta-learning algorithm, implemented the computational pipelines, conducted primary experiments, and wrote the original manuscript.
+\textbf{Khushi Chadda}: Performed literature review, synthesized related works, assisted with qualitative visualization and attention heatmaps, and contributed to manuscript curation.
+\textbf{Harsh Chhatri}: Curated and preprocessed multi-organ CT/MRI datasets, verified domain conversion artifacts, and assisted with benchmark logging.
+\textbf{Dr. Shweta Gangrade}: Supervised the project, provided clinical and methodological guidance, reviewed the experimental design, and critically revised the manuscript for intellectual content.
+
+\subsubsection*{Acknowledgements}
 This work was conducted at the School of Technology Management \& Engineering, SVKM's NMIMS, Indore, India. The authors gratefully acknowledge the laboratory facilities and computational resources provided for this research.
 
 %

@@ -1,0 +1,39 @@
+
+\begin{table}[t]
+\centering
+\caption{In-Domain Few-Shot Segmentation Performance Comparison. Our 3-layer Fusion Adapter ($355\text{K}$ trainable params, 23\% of total network) significantly outperforms the frozen UniverSeg foundation baseline across all four anatomical targets ($p < 0.001$, paired Wilcoxon signed-rank test). On Spleen CT, it recovers $97.3\%$ of the full specialist nnU-Net benchmark.}
+\label{tab:main_results}
+\begin{tabular}{l|c|c|c|c}
+\hline
+\textbf{Target Dataset (Modality)} & \textbf{UniverSeg Baseline} & \textbf{Our Adapter (3-Layer)} & \textbf{Relative Gain} & \textbf{nnU-Net Specialist} \\
+\hline
+Spleen (CT)           & $0.558 \pm 0.309$ & $\mathbf{0.888 \pm 0.052}^{***}$ & $+59.1\%$  & $0.913 \pm 0.031$ \\
+Liver (CT)            & $0.495 \pm 0.284$ & $\mathbf{0.934 \pm 0.038}^{***}$ & $+88.7\%$  & --- \\
+Heart (Cine MRI)      & $0.312 \pm 0.245$ & $\mathbf{0.830 \pm 0.061}^{***}$ & $+166.0\%$ & --- \\
+Brain Tumour (MRI)    & $0.161 \pm 0.182$ & $\mathbf{0.752 \pm 0.074}^{***}$ & $\mathbf{+367.1\%}$ & --- \\
+\hline
+\textbf{Average}      & $0.382$           & $\mathbf{0.851}$                 & $+122.8\%$ & --- \\
+\hline
+\multicolumn{5}{l}{\footnotesize $^{***}$ indicates $p < 0.001$ against UniverSeg baseline by paired Wilcoxon signed-rank test.}
+\end{tabular}
+\end{table}
+
+
+
+\begin{table}[t]
+\centering
+\caption{Cross-Anatomical Zero-Shot Generalization and Leave-One-Dataset-Out (LODO) Transfer. Naive adapter training collapses to near-zero ($0.040$ mean Dice) due to anatomical memorization. Episodic meta-learning prevents spatial memorization, elevating zero-shot transfer by tenfold to $0.400$ mean Dice and exceeding the foundation baseline on Liver, Heart, and Brain Tumour.}
+\label{tab:zeroshot_matrix}
+\begin{tabular}{l|c|c|c|c}
+\hline
+\textbf{Evaluation Domain} & \textbf{Naive Zero-Shot} & \textbf{UniverSeg Base} & \textbf{Episodic Zero-Shot} & \textbf{$\Delta$ vs Naive} \\
+\hline
+Spleen (CT)        & $0.015$ & $0.558$ & $\mathbf{0.157}$ & $+0.142$ ($10\times$) \\
+Liver (CT)         & $0.010$ & $0.495$ & $\mathbf{0.625}$ & $\mathbf{+0.614}$ ($60\times$) \\
+Heart (MRI)        & $0.107$ & $0.312$ & $\mathbf{0.423}$ & $+0.316$ ($4\times$) \\
+Brain Tumour (MRI) & $0.028$ & $0.161$ & $\mathbf{0.395}$ & $+0.367$ ($14\times$) \\
+\hline
+\textbf{Mean Dice} & $0.040$ & $0.382$ & $\mathbf{0.400}$ & $\mathbf{+0.360}$ ($10\times$) \\
+\hline
+\end{tabular}
+\end{table}

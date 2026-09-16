@@ -143,8 +143,9 @@ class InContextSegmentationModel(nn.Module):
         self,
         query_img: torch.Tensor,
         support_imgs: torch.Tensor,
-        support_masks: torch.Tensor
-    ) -> torch.Tensor:
+        support_masks: torch.Tensor,
+        return_attention: bool = False,
+    ):
         """
         Forward Pass of InContextSegmentationModel.
 
@@ -152,9 +153,10 @@ class InContextSegmentationModel(nn.Module):
             query_img (torch.Tensor): Target image [B, C_in, H, W]
             support_imgs (torch.Tensor): Support set images [B, S, C_in, H, W]
             support_masks (torch.Tensor): Support set masks [B, S, 1, H, W]
+            return_attention (bool): Whether to return cross-attention weights.
 
         Returns:
-            torch.Tensor: Segmentation logits [B, 1, H, W]
+            torch.Tensor or (torch.Tensor, list): Segmentation logits [B, 1, H, W], optionally with attention maps.
         """
         B, C_in, H, W = query_img.shape
         _, S, _, _, _ = support_imgs.shape
@@ -179,7 +181,10 @@ class InContextSegmentationModel(nn.Module):
         s_masks_down = s_masks_down_flat.view(B, S, 1, c3_spatial_h, c3_spatial_w)
 
         # Step 4: Apply Bottleneck In-Context Cross-Attention Fusion (Trainable)
-        fused_bottleneck = self.fusion(q_f3, s_f3, s_masks_down)  # [B, 64, H/4, W/4]
+        if return_attention:
+            fused_bottleneck, attns = self.fusion(q_f3, s_f3, s_masks_down, return_attention=True)
+        else:
+            fused_bottleneck = self.fusion(q_f3, s_f3, s_masks_down)
 
         # Step 5: Decoder with Skip Connections (Trainable)
         # Stage 2 Up-sampling
@@ -195,6 +200,8 @@ class InContextSegmentationModel(nn.Module):
         # Final Logits Output
         logits = self.final_conv(x)                 # [B, 1, H, W]
 
+        if return_attention:
+            return logits, attns
         return logits
 
 

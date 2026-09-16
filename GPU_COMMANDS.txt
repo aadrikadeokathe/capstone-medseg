@@ -1,62 +1,82 @@
 ================================================================================
-          CAPSTONE-MEDSEG: GPU OVERNIGHT RUNNER & CHEATSHEET
+          CAPSTONE-MEDSEG: GPU EXECUTION & NNU-NET RUNNER CHEATSHEET
 ================================================================================
 
-WHEN YOU LEAVE THE LAB FOR HOME:
+================================================================================
+PART A: TRAINING NNU-NET SPECIALISTS (HEART, LIVER, BRAIN TUMOUR)
+================================================================================
+
+ESTIMATED TIMES (2D CONFIGURATION, 250 EPOCHS):
+  1. Heart (Dataset 002):        ~1.5 to 2.0 hours
+  2. Liver (Dataset 003):        ~45 minutes
+  3. Brain Tumour (Dataset 001): ~2.5 to 3.5 hours
+  Total for all 3:               ~5 to 6 hours
+
 --------------------------------------------------------------------------------
-You can leave the Windows GPU PC running overnight. It will execute all high-priority
-experiments sequentially, and automatically commit & push everything to GitHub!
-
-
-================================================================================
-OPTION 1: AUTOMATIC 1-CLICK OVERNIGHT RUNNER (RECOMMENDED)
-================================================================================
-First update your folder:
+OPTION 1: AUTOMATIC 1-CLICK RUNNER (RUNS ALL 3 SEQUENTIALLY)
+--------------------------------------------------------------------------------
+1. Pull latest scripts:
    git pull origin main
 
-Then simply double-click:
-   RUN_OVERNIGHT.bat
+2. Double-click:
+   RUN_NNUNET.bat
+   (or run `.\RUN_NNUNET.bat` in PowerShell)
 
-(Or in PowerShell run:  .\RUN_OVERNIGHT.bat )
+It will automatically:
+  - Set nnUNet_raw, nnUNet_preprocessed, and nnUNet_results environment variables
+  - Convert raw NIfTIs into Dataset002, Dataset003, Dataset001
+  - Run plan & preprocess
+  - Train 2D fold 0 for 250 epochs
+  - Commit and push the summary.json results to GitHub!
 
-This automatically executes:
-  1. 40-Epoch Balanced Episodic Training (Main joint model, ~1.5 hrs)
-  2. Shot-Count Ablation Curve (K = 1, 2, 4, 8, ~15 mins)
-  3. Multi-Seed Run 123 (30 epochs, ~1 hr)
-  4. Multi-Seed Run 456 (30 epochs, ~1 hr)
-  5. Automatically pushes ALL logs and .pt models to GitHub when finished!
+--------------------------------------------------------------------------------
+OPTION 2: RUN INDIVIDUAL DATASETS MANUALLY IN POWERSHELL
+--------------------------------------------------------------------------------
+# Step 1: Set Environment Variables (MUST RUN FIRST IN POWERSHELL):
+$env:nnUNet_raw = "$PWD\data\nnunet_raw"
+$env:nnUNet_preprocessed = "$PWD\data\nnunet_preprocessed"
+$env:nnUNet_results = "$PWD\data\nnunet_results"
+
+# Step 2: Convert raw datasets:
+python src\nnunet_pipeline.py --dataset all
+
+# Step 3: Run Heart (Dataset ID 2) [Fastest - ~1.5 hrs]:
+nnUNetv2_plan_and_preprocess -d 2 --verify_dataset_integrity
+nnUNetv2_train 2 2d 0 -tr nnUNetTrainer_250epochs
+
+# Step 4: Run Liver (Dataset ID 3) [~45 mins]:
+nnUNetv2_plan_and_preprocess -d 3 --verify_dataset_integrity
+nnUNetv2_train 3 2d 0 -tr nnUNetTrainer_250epochs
+
+# Step 5: Run Brain Tumour (Dataset ID 1) [~3 hrs]:
+nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity
+nnUNetv2_train 1 2d 0 -tr nnUNetTrainer_250epochs
+
+--------------------------------------------------------------------------------
+WHERE RESULTS ARE SAVED:
+--------------------------------------------------------------------------------
+Validation Dice scores are automatically written to:
+  data\nnunet_results\Dataset002_Heart\nnUNetTrainer_250epochs__nnUNetPlans__2d\fold_0\summary.json
+  data\nnunet_results\Dataset003_Liver\nnUNetTrainer_250epochs__nnUNetPlans__2d\fold_0\summary.json
+  data\nnunet_results\Dataset001_BrainTumour\nnUNetTrainer_250epochs__nnUNetPlans__2d\fold_0\summary.json
 
 
 ================================================================================
-OPTION 2: MANUAL STEP-BY-STEP (IF RUNNING ONLY 40 EPOCHS BEFORE LEAVING)
+PART B: EPISODIC OVERNIGHT RUNNER (MAIN PAPER ADAPTER)
 ================================================================================
-If you only want to run the 40 epochs right now:
+To run the 40-epoch joint episodic adapter model, shot ablation, and multi-seeds:
 
-   python -u src\train_episodic.py --epochs 40 --episodes_per_epoch 500 --lr 5e-4 --results_file logs\episodic_zeroshot_results.txt
-
-To resume if interrupted:
-   python -u src\train_episodic.py --epochs 40 --episodes_per_epoch 500 --lr 5e-4 --resume
+   git pull origin main
+   .\RUN_OVERNIGHT.bat
 
 
 ================================================================================
-DO WE NEED NNU-NET FOR THE OTHER 3 ORGANS (LIVER, HEART, BRAIN)?
-================================================================================
-NO! Here is why:
-  1. nnU-Net on 3D datasets takes 12-24+ hours PER organ and 50+ GB disk space.
-  2. Our paper's central message is that nnU-Net is an inflexible, monolithic
-     specialist that is impractical for clinical hospitals to retrain from scratch.
-  3. Having nnU-Net on Spleen (the primary gold standard) proves that our adapter
-     recovers 97.3% of specialist accuracy with 77% fewer trainable weights.
-  4. Across all 4 organs, we compare directly to the UniverSeg foundation model,
-     which is the exact standard protocol for few-shot medical imaging papers.
-
-
-================================================================================
-HOW TO PUSH ANYTIME MANUALLY:
+PART C: PUSHING ANY RESULTS MANUALLY TO GITHUB
 ================================================================================
    git add logs/
    git add -f models/checkpoints/*.pt
-   git commit -m "completed gpu training results"
+   git add data/nnunet_results/*/nnUNetTrainer*/*/summary.json
+   git commit -m "completed training results"
    git pull origin main --rebase
    git push origin main
 ================================================================================

@@ -20,13 +20,33 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
     import torch
+    from torch.utils.data import DataLoader
     from src.models.in_context_model import InContextSegmentationModel
-    from src.data_loading import get_dataloader
+    from src.data_split import (
+        get_spleen_splits,
+        get_liver_splits,
+        get_heart_splits,
+        get_braintumour_splits,
+    )
 except ImportError as e:
     print(f"[WARN] Local imports: {e}")
 
 
-def run_support_ablation(checkpoint_path: str, datasets: list, output_file: str, device: str = "cuda"):
+def get_test_loader(ds_name: str, batch_size: int = 4, num_support: int = 5):
+    if ds_name == "spleen":
+        _, _, te, _ = get_spleen_splits(num_support=num_support)
+    elif ds_name == "liver":
+        _, _, te, _ = get_liver_splits(num_support=num_support)
+    elif ds_name == "heart":
+        _, _, te, _ = get_heart_splits(num_support=num_support)
+    elif ds_name == "braintumour":
+        _, _, te, _ = get_braintumour_splits(num_support=num_support)
+    else:
+        raise ValueError(f"Unknown dataset: {ds_name}")
+    return DataLoader(te, batch_size=batch_size, shuffle=False, num_workers=0)
+
+
+def run_support_ablation(checkpoint_path: str, datasets: list, output_file: str, device: str = "cuda", max_samples: int = None):
     """Runs deterministic support slice selection strategies."""
     device_obj = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
     print(f"[INFO] Using device: {device_obj}")
@@ -52,18 +72,18 @@ def run_support_ablation(checkpoint_path: str, datasets: list, output_file: str,
         for strat in strategies:
             print(f"  --> Strategy: {strat}...")
             try:
-                test_loader = get_dataloader(ds_name, split="test", batch_size=4, num_workers=0)
+                test_loader = get_test_loader(ds_name, batch_size=4, num_support=5)
             except Exception as e:
                 print(f"  Could not load dataloader: {e}")
                 continue
 
             dices = []
             with torch.no_grad():
-                for batch in test_loader:
-                    query = batch["query"].to(device_obj)
-                    support_imgs = batch["support_imgs"].to(device_obj)
-                    support_masks = batch["support_masks"].to(device_obj)
-                    targets = batch["target"].to(device_obj)
+                for query, targets, support_imgs, support_masks in test_loader:
+                    query = query.to(device_obj)
+                    support_imgs = support_imgs.to(device_obj)
+                    support_masks = support_masks.to(device_obj)
+                    targets = targets.to(device_obj)
 
                     # Deterministic support slice sorting based on strategy
                     B, S, C, H, W = support_masks.shape
@@ -97,6 +117,9 @@ def run_support_ablation(checkpoint_path: str, datasets: list, output_file: str,
                     dice_batch = (2.0 * intersection / (total + 1e-7)).cpu().numpy()
                     dices.extend(dice_batch)
 
+                    if max_samples and len(dices) >= max_samples:
+                        break
+
             mean_d = float(np.mean(dices)) if len(dices) > 0 else 0.0
             std_d = float(np.std(dices)) if len(dices) > 0 else 0.0
             ablation_results[ds_name][strat] = (mean_d, std_d)
@@ -126,8 +149,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Support Slice Selection Ablation")
     parser.add_argument("--checkpoint", type=str, default="models/checkpoints/best_fusion_episodic.pt")
     parser.add_argument("--datasets", nargs="+", default=["spleen", "heart"])
+    parser.add_argument("--max_samples", type=int, default=None, help="Max test samples to evaluate per strategy")
     parser.add_argument("--output", type=str, default="logs/support_selection_ablation.txt")
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 
-    run_support_ablation(args.checkpoint, args.datasets, args.output, args.device)
+    run_support_ablation(args.checkpoint, args.datasets, args.output, args.device, args.max_samples)

@@ -18,8 +18,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 try:
     import torch
     import torch.nn.functional as F
+    from torch.utils.data import DataLoader
     from src.models.in_context_model import InContextSegmentationModel
-    from src.data_loading import get_dataloader
+    from src.data_split import (
+        get_spleen_splits,
+        get_liver_splits,
+        get_heart_splits,
+        get_braintumour_splits,
+    )
 except ImportError as e:
     print(f"[WARN] Torch/Local modules not fully loaded in this environment: {e}")
 
@@ -70,7 +76,21 @@ def compute_hd95_np(pred_mask: np.ndarray, gt_mask: np.ndarray, voxel_spacing=(1
     return float(np.percentile(all_distances, 95))
 
 
-def run_evaluation(checkpoint_path: str, datasets: list, output_file: str, device: str = "cuda"):
+def get_test_loader(ds_name: str, batch_size: int = 4):
+    if ds_name == "spleen":
+        _, _, te, _ = get_spleen_splits(num_support=2)
+    elif ds_name == "liver":
+        _, _, te, _ = get_liver_splits(num_support=2)
+    elif ds_name == "heart":
+        _, _, te, _ = get_heart_splits(num_support=2)
+    elif ds_name == "braintumour":
+        _, _, te, _ = get_braintumour_splits(num_support=2)
+    else:
+        raise ValueError(f"Unknown dataset: {ds_name}")
+    return DataLoader(te, batch_size=batch_size, shuffle=False, num_workers=0)
+
+
+def run_evaluation(checkpoint_path: str, datasets: list, output_file: str, device: str = "cuda", max_samples: int = None):
     """Evaluates checkpoint on specified datasets and logs Dice + HD95."""
     device_obj = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
     print(f"[INFO] Using device: {device_obj}")
@@ -90,7 +110,7 @@ def run_evaluation(checkpoint_path: str, datasets: list, output_file: str, devic
     for ds_name in datasets:
         print(f"\nEvaluating dataset: {ds_name}...")
         try:
-            val_loader = get_dataloader(ds_name, split="test", batch_size=4, num_workers=0)
+            val_loader = get_test_loader(ds_name, batch_size=4)
         except Exception as e:
             print(f"[SKIP] Could not load dataloader for {ds_name}: {e}")
             continue
@@ -99,11 +119,11 @@ def run_evaluation(checkpoint_path: str, datasets: list, output_file: str, devic
         hd95s = []
 
         with torch.no_grad():
-            for batch_idx, batch in enumerate(val_loader):
-                query = batch["query"].to(device_obj)
-                support_imgs = batch["support_imgs"].to(device_obj)
-                support_masks = batch["support_masks"].to(device_obj)
-                targets = batch["target"].to(device_obj)
+            for batch_idx, (query, targets, support_imgs, support_masks) in enumerate(val_loader):
+                query = query.to(device_obj)
+                support_imgs = support_imgs.to(device_obj)
+                support_masks = support_masks.to(device_obj)
+                targets = targets.to(device_obj)
 
                 preds = model(query, support_imgs, support_masks)
                 preds = torch.sigmoid(preds).cpu().numpy()
@@ -118,6 +138,11 @@ def run_evaluation(checkpoint_path: str, datasets: list, output_file: str, devic
 
                     dices.append(dice)
                     hd95s.append(hd)
+
+                    if max_samples and len(dices) >= max_samples:
+                        break
+                if max_samples and len(dices) >= max_samples:
+                    break
 
         mean_dice = float(np.mean(dices)) if len(dices) > 0 else 0.0
         std_dice = float(np.std(dices)) if len(dices) > 0 else 0.0
@@ -153,8 +178,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate Dice and HD95")
     parser.add_argument("--checkpoint", type=str, default="models/checkpoints/best_fusion_episodic.pt")
     parser.add_argument("--datasets", nargs="+", default=["spleen", "liver", "heart", "braintumour"])
+    parser.add_argument("--max_samples", type=int, default=None, help="Max test samples to evaluate per dataset (e.g. 50 for quick CPU run)")
     parser.add_argument("--output", type=str, default="logs/hd95_evaluation_results.txt")
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 
-    run_evaluation(args.checkpoint, args.datasets, args.output, args.device)
+    run_evaluation(args.checkpoint, args.datasets, args.output, args.device, args.max_samples)

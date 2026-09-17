@@ -16,4 +16,4 @@ external/
 node_modules/
 package*.json
 *.pptx
-
+scratch/

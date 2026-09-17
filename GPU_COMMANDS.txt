@@ -3,26 +3,26 @@
 ================================================================================
 
 ================================================================================
-PART A: REVIEWER PROOFING SCRIPTS (RUN THESE FIRST - FAST, ~2-5 MINS EACH)
+PART A: REVIEWER PROOFING SCRIPTS (CAN RUN ON MAC OR GPU - FAST, ~1-2 MINS EACH)
 ================================================================================
-These 3 scripts address the exact top-tier reviewer requirements:
+These 3 scripts address top-tier reviewer requirements:
 boundary distance (HD95), support slice sensitivity, and hardware compute profiling.
+Because our model is lightweight (1.5M parameters) and evaluation is pure inference,
+THESE CAN RUN DIRECTLY ON YOUR MAC (or a GPU).
 
-1. Pull latest code from GitHub:
-   git pull origin main
+On Mac / Linux (Terminal):
+1. Run Computational Latency, FLOPs & Parameter Profiling (~10 secs):
+   ./venv/bin/python src/profile_compute.py --output logs/compute_profile.txt
 
-2. Run HD95 Boundary Distance & Volumetric Dice Evaluation (~2 mins):
-   python src\compute_hd95.py --checkpoint models\checkpoints\best_fusion_episodic.pt --output logs\hd95_evaluation_results.txt
+2. Run HD95 Boundary Distance & Volumetric Dice Evaluation (~1-2 mins):
+   ./venv/bin/python src/compute_hd95.py --checkpoint models/checkpoints/best_fusion_episodic.pt --output logs/hd95_evaluation_results.txt
 
-3. Run Support Slice Selection Sensitivity Ablation (~2 mins):
-   python src\evaluate_support_selection.py --checkpoint models\checkpoints\best_fusion_episodic.pt --datasets spleen heart --output logs\support_selection_ablation.txt
+3. Run Support Slice Selection Sensitivity Ablation (~1-2 mins):
+   ./venv/bin/python src/evaluate_support_selection.py --checkpoint models/checkpoints/best_fusion_episodic.pt --datasets spleen heart --output logs/support_selection_ablation.txt
 
-4. Run Computational Latency, FLOPs & Peak VRAM Profiling (~1 min):
-   python src\profile_compute.py --layers 3 --device cuda --output logs\compute_profile.txt
-
-5. Push all newly generated logs to GitHub:
-   git add logs\hd95_evaluation_results.txt logs\support_selection_ablation.txt logs\compute_profile.txt
-   git commit -m "add HD95 boundary evaluation, support ablation, and compute profile"
+4. Push results to GitHub:
+   git add logs/hd95_evaluation_results.txt logs/support_selection_ablation.txt logs/compute_profile.txt
+   git commit -m "add HD95 evaluation, support ablation, and compute profile"
    git push origin main
 
 

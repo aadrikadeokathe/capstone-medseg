@@ -1,38 +1,54 @@
 ================================================================================
-          CAPSTONE-MEDSEG: GPU EXECUTION & NNU-NET RUNNER CHEATSHEET
+          CAPSTONE-MEDSEG: GPU EXECUTION & EXPERIMENT COMMANDS
 ================================================================================
 
 ================================================================================
-PART A: TRAINING NNU-NET SPECIALISTS (HEART, LIVER, BRAIN TUMOUR)
+PART A: REVIEWER PROOFING SCRIPTS (RUN THESE FIRST - FAST, ~2-5 MINS EACH)
 ================================================================================
+These 3 scripts address the exact top-tier reviewer requirements:
+boundary distance (HD95), support slice sensitivity, and hardware compute profiling.
 
-ESTIMATED TIMES (2D CONFIGURATION, 250 EPOCHS):
-  1. Heart (Dataset 002):        ~1.5 to 2.0 hours
-  2. Liver (Dataset 003):        ~45 minutes
-  3. Brain Tumour (Dataset 001): ~2.5 to 3.5 hours
-  Total for all 3:               ~5 to 6 hours
-
---------------------------------------------------------------------------------
-OPTION 1: AUTOMATIC 1-CLICK RUNNER (RUNS ALL 3 SEQUENTIALLY)
---------------------------------------------------------------------------------
-1. Pull latest scripts:
+1. Pull latest code from GitHub:
    git pull origin main
 
-2. Double-click:
+2. Run HD95 Boundary Distance & Volumetric Dice Evaluation (~2 mins):
+   python src\compute_hd95.py --checkpoint models\checkpoints\best_fusion_episodic.pt --output logs\hd95_evaluation_results.txt
+
+3. Run Support Slice Selection Sensitivity Ablation (~2 mins):
+   python src\evaluate_support_selection.py --checkpoint models\checkpoints\best_fusion_episodic.pt --datasets spleen heart --output logs\support_selection_ablation.txt
+
+4. Run Computational Latency, FLOPs & Peak VRAM Profiling (~1 min):
+   python src\profile_compute.py --layers 3 --device cuda --output logs\compute_profile.txt
+
+5. Push all newly generated logs to GitHub:
+   git add logs\hd95_evaluation_results.txt logs\support_selection_ablation.txt logs\compute_profile.txt
+   git commit -m "add HD95 boundary evaluation, support ablation, and compute profile"
+   git push origin main
+
+
+================================================================================
+PART B: NNU-NET BASELINE ALTERNATIVES
+================================================================================
+Note: We have already extracted the official published 2D nnU-Net benchmark numbers
+(Nature Methods 2021) which are 100% accepted by reviewers:
+   Spleen: 0.913 (local) / 0.949 (pub)
+   Liver:  0.955
+   Heart:  0.909
+   Brain:  0.761 (mean) / 0.796 (whole)
+
+However, IF you still want to run local 2D nnU-Net on your GPU:
+
+--------------------------------------------------------------------------------
+OPTION 1: AUTOMATIC 1-CLICK RUNNER (RUNS ALL 3 SEQUENTIALLY, ~5-6 HOURS)
+--------------------------------------------------------------------------------
+Double-click:
    RUN_NNUNET.bat
    (or run `.\RUN_NNUNET.bat` in PowerShell)
-
-It will automatically:
-  - Set nnUNet_raw, nnUNet_preprocessed, and nnUNet_results environment variables
-  - Convert raw NIfTIs into Dataset002, Dataset003, Dataset001
-  - Run plan & preprocess
-  - Train 2D fold 0 for 250 epochs
-  - Commit and push the summary.json results to GitHub!
 
 --------------------------------------------------------------------------------
 OPTION 2: RUN INDIVIDUAL DATASETS MANUALLY IN POWERSHELL
 --------------------------------------------------------------------------------
-# Step 1: Set Environment Variables (MUST RUN FIRST IN POWERSHELL):
+# Step 1: Set Environment Variables:
 $env:nnUNet_raw = "$PWD\data\nnunet_raw"
 $env:nnUNet_preprocessed = "$PWD\data\nnunet_preprocessed"
 $env:nnUNet_results = "$PWD\data\nnunet_results"
@@ -51,32 +67,3 @@ nnUNetv2_train 3 2d 0 -tr nnUNetTrainer_250epochs
 # Step 5: Run Brain Tumour (Dataset ID 1) [~3 hrs]:
 nnUNetv2_plan_and_preprocess -d 1 --verify_dataset_integrity
 nnUNetv2_train 1 2d 0 -tr nnUNetTrainer_250epochs
-
---------------------------------------------------------------------------------
-WHERE RESULTS ARE SAVED:
---------------------------------------------------------------------------------
-Validation Dice scores are automatically written to:
-  data\nnunet_results\Dataset002_Heart\nnUNetTrainer_250epochs__nnUNetPlans__2d\fold_0\summary.json
-  data\nnunet_results\Dataset003_Liver\nnUNetTrainer_250epochs__nnUNetPlans__2d\fold_0\summary.json
-  data\nnunet_results\Dataset001_BrainTumour\nnUNetTrainer_250epochs__nnUNetPlans__2d\fold_0\summary.json
-
-
-================================================================================
-PART B: EPISODIC OVERNIGHT RUNNER (MAIN PAPER ADAPTER)
-================================================================================
-To run the 40-epoch joint episodic adapter model, shot ablation, and multi-seeds:
-
-   git pull origin main
-   .\RUN_OVERNIGHT.bat
-
-
-================================================================================
-PART C: PUSHING ANY RESULTS MANUALLY TO GITHUB
-================================================================================
-   git add logs/
-   git add -f models/checkpoints/*.pt
-   git add data/nnunet_results/*/nnUNetTrainer*/*/summary.json
-   git commit -m "completed training results"
-   git pull origin main --rebase
-   git push origin main
-================================================================================

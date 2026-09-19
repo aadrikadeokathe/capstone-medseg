@@ -6,6 +6,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{microtype}
+\usepackage{float}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{url}
 
@@ -158,33 +159,38 @@ As shown in Table~\ref{tab:main_results}, our 3-layer adapter achieves substanti
 \subsection{The Difficulty Scaling Law}
 A notable empirical finding is the \textit{Difficulty Scaling Law}: relative improvements are inversely proportional to foundation baseline performance. While Spleen gains $+59.1\%$, Brain Tumour FLAIR MRI surges by $\mathbf{+367.1\%}$ ($0.161 \rightarrow 0.752$). Because the frozen backbone possesses strong prior representations for standard CT anatomy but weak representations for diffuse neuro-oncological lesions, the cross-attention mechanism compensates most heavily where foundation representations are weakest.
 
-\begin{table}[t]
+\subsection{Cross-Domain Zero-Shot Transfer Performance}
+Standard single-dataset training results in poor zero-shot performance when evaluated on unseen domains. As detailed in Table~\ref{tab:zeroshot_episodic}, a model trained exclusively on Spleen achieves an average zero-shot Dice of only $3.99\%$ across held-out datasets (Spleen: $1.47\%$, Liver: $1.04\%$, Heart: $10.68\%$, Brain Tumour: $2.78\%$), caused by the \textit{Spatial Memorization Trap} where cross-attention memorizes static anatomical coordinates.
+
+Implementing multi-task episodic meta-learning over 30 epochs ($15,000$ episodes) resolves this issue. Average cross-domain zero-shot performance increases to $39.98\%$, representing a tenfold gain of $+35.99$ percentage points. Notably, zero-shot transfer onto Liver CT reaches $62.48\%$, while Heart MRI and Brain Tumour MRI reach $42.29\%$ and $39.52\%$ respectively, surpassing the frozen UniverSeg foundation baseline on 3 out of 4 benchmarks.
+
+\begin{table}[H]
 \centering
-\caption{Cross-Anatomical Zero-Shot Generalization: Standard Per-Dataset Training vs. Episodic Multi-Task Meta-Learning (2-shot). Standard training collapses ($3.99\%$ average Dice) due to the Spatial Memorization Trap. Multi-task episodic meta-learning forces invariant semantic prompt matching, yielding an average $+35.99$ percentage point ($10\times$) gain across unseen targets.}
+\setlength{\tabcolsep}{12pt}       % Clean horizontal column padding
+\renewcommand{\arraystretch}{1.2}  % Comfortable vertical row spacing
+\caption{Cross-Domain Zero-Shot Transfer Performance Comparison: Standard Per-Dataset Training vs. Multi-Task Episodic Meta-Learning ($30$ epochs, $500$ episodes/epoch, $K=2$ shots). Episodic meta-learning breaks the Spatial Memorization Trap, delivering a tenfold ($+35.99$\,pp) average generalization gain.}
 \label{tab:zeroshot_episodic}
-\begin{tabular}{lcccc}
+\begin{tabular}{l c c c}
 \toprule
-\textbf{Target Dataset (Modality)} & \textbf{Standard Zero-Shot} & \textbf{UniverSeg Base} & \textbf{Episodic Zero-Shot} & \textbf{Absolute Gain} \\
+\textbf{Target Dataset (Modality)} & \textbf{Standard Zero-Shot} & \textbf{Episodic Zero-Shot} & \textbf{Absolute Gain ($\Delta$)} \\
 \midrule
-Spleen (CT)           & $1.47\%$  & $55.80\%$ & $\mathbf{15.65\%}$ & $+14.18\text{ pp}$ \\
-Liver (CT)            & $1.04\%$  & $49.50\%$ & $\mathbf{62.48\%}$ & $\mathbf{+61.44\text{ pp}}$ \\
-Heart (Cine MRI)      & $10.68\%$ & $31.20\%$ & $\mathbf{42.29\%}$ & $+31.61\text{ pp}$ \\
-Brain Tumour (MRI)    & $2.78\%$  & $16.10\%$ & $\mathbf{39.52\%}$ & $+36.74\text{ pp}$ \\
+Spleen (CT)           & $1.47\%$  & $15.65\%$ & $+14.18\text{ pp}$ \\
+Liver (CT)            & $1.04\%$  & $62.48\%$ & $+61.44\text{ pp}$ \\
+Heart (Cine MRI)      & $10.68\%$ & $42.29\%$ & $+31.61\text{ pp}$ \\
+Brain Tumour (MRI)    & $2.78\%$  & $39.52\%$ & $+36.74\text{ pp}$ \\
 \midrule
-\textbf{Average}      & $\mathbf{3.99\%}$ & $38.15\%$ & $\mathbf{39.98\%}$ & $\mathbf{+35.99\text{ pp}}$ \\
+\textbf{Average}      & $\mathbf{3.99\%}$ & $\mathbf{39.98\%}$ & $\mathbf{+35.99\text{ pp}}$ \\
 \bottomrule
+\multicolumn{4}{l}{\footnotesize Note: pp denotes percentage points ($15.65\% - 1.47\% = 14.18\text{ pp}$).}
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.88\textwidth]{figures/zeroshot_transfer_comparison.png}
-\caption{Zero-Shot Cross-Anatomical Transfer Comparison between Standard In-Domain Training and Episodic Multi-Task Meta-Learning across Four Medical Image Benchmarks. Episodic training prevents cross-attention from memorizing fixed spatial coordinates, achieving an average tenfold transfer gain (+35.99 pp).}
+\includegraphics[width=0.85\linewidth,height=4.3cm,keepaspectratio=false]{figures/zeroshot_transfer_comparison.png}
+\caption{Cross-Domain Zero-Shot Transfer Performance comparing standard per-dataset training against episodic meta-learning across held-out target datasets. Episodic training resolves spatial memorization, boosting average zero-shot Dice by $+35.99$ percentage points.}
 \label{fig:zeroshot_transfer}
 \end{figure}
-
-\subsection{Cross-Domain Generalization and the Spatial Memorization Trap}
-When evaluating standard in-domain adapters on unseen anatomical organs (zero-shot transfer), performance drops catastrophically to $0.01\text{--}0.04$ Dice (Table~\ref{tab:zeroshot_episodic} and Fig.~\ref{fig:zeroshot_transfer}). Cross-attention heatmaps (Fig.~\ref{fig:attention}) reveal that the adapter learns fixed spatial priors during sequential batch training, ignoring support mask prompts. In contrast, our multi-task episodic meta-learning enforces invariant semantic token matching, elevating zero-shot transfer by $10\times$ ($3.99\% \rightarrow 39.98\%$) and surpassing the foundation baseline on Liver ($62.48\%$ vs. $49.50\%$), Heart ($42.29\%$ vs. $31.20\%$), and Brain Tumour ($39.52\%$ vs. $16.10\%$).
 
 \begin{figure}[t]
 \centering
